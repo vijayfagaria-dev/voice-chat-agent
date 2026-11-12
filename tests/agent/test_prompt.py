@@ -182,3 +182,16 @@ class TestTheStateMessage:
 
     def test_is_deterministic_the_same_input_gives_the_same_bytes(self) -> None:
         assert state_message(state_input(fields=all_valid())) == state_message(state_input(fields=all_valid()))
+
+
+class TestNoExampleValuesForTheModelToCopy:
+    """Live call of 2026-11-12: the tool description said "e.g. 'Apple iPhone 14 Pro'", and gpt-oss-20b saved exactly that
+    as the customer's device in 6 of 6 replays, in the same reply in which it asked for it (replays without the example:
+    0 of 9). Anything the model reads must describe a value, never show one a customer could plausibly have said."""
+
+    @pytest.mark.parametrize("example", ["iPhone", "Samsung", "Galaxy", "Tuesday", "Dell"])
+    def test_the_prompt_and_tools_show_no_plausible_customer_answers(self, example: str) -> None:
+        from app.agent.tools import tools_json
+
+        assert example.lower() not in SYSTEM_PROMPT.lower()
+        assert example.lower() not in tools_json().lower()

@@ -29,16 +29,19 @@ def is_tool_name(name: str) -> bool:
 TOOLS: tuple[ToolDefinition, ...] = (
     ToolDefinition(
         name="save_field",
-        description="Save a value the customer said on the call. Call it once per field you learned this turn. For serialNumber and email it only notes what you heard: they must still type it in the chat card.",
+        description="Save a value the customer just said in their latest message, once per field. Never call it for something you are about to ask, and never with a value of your own. For serialNumber and email it only notes what you heard: they must still type it in the chat card.",
         parameters={
             "type": "object",
             "properties": {
                 "field": {"type": "string", "enum": SPOKEN_FIELDS},
                 "value": {
                     "type": "string",
-                    "description": "Your normalized value, e.g. 'Apple iPhone 14 Pro', 'high'. For dates pass the customer's words, e.g. 'last Tuesday'.",
+                    "description": "The value as the customer gave it, normalized. For dates pass the customer's own words.",
                 },
-                "spoken_evidence": {"type": "string", "description": "The customer's exact words."},
+                "spoken_evidence": {
+                    "type": "string",
+                    "description": "The customer's exact words from their latest message.",
+                },
                 "user_confirmed": {
                     "type": "boolean",
                     "description": "True only if the customer confirmed this value when you read it back.",

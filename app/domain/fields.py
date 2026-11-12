@@ -196,7 +196,7 @@ _DEFINITIONS: tuple[FieldDefinition, ...] = (
     FieldDefinition(
         id="deviceModel",
         label="device model",
-        description="the brand and model, e.g. Apple iPhone 14 Pro (if they don't know, ask once more, then accept that)",
+        description="the brand and model, as the customer says them (if they don't know, ask once more, then accept that)",
         primary_channel="call",
         required=True,
         authority="either",
@@ -229,7 +229,7 @@ _DEFINITIONS: tuple[FieldDefinition, ...] = (
     FieldDefinition(
         id="problemStartedAt",
         label="start date",
-        description="when the problem started; pass the customer's exact words (e.g. 'last Tuesday'); dates are worked out by the system",
+        description="when the problem started; pass the customer's exact words; dates are worked out by the system",
         primary_channel="call",
         required=True,
         authority="either",
