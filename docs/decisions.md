@@ -16,3 +16,4 @@ Where the brief left room, these are the choices made and the reasoning behind t
 | **Service centres are a fictional list** ("… Demo Repair Centre") | No real business is impersonated |
 | A customer **who never calls** still gets the chat: after 2 minutes without a call it starts with a message and the first card | The chat alone must be able to finish a claim |
 | **Retention:** data is kept until a review period ends, then should be purged | No purge script is built yet (see [reliability](reliability.md)) |
+| **Start screen lists every claim on the server** (title, status, progress); no accounts | The assignment has no login; the picker is the way back into a claim. The title is worked out from the fields at read time (device and problem, else "New claim" and the start time), so it needs no stored name and no model call |

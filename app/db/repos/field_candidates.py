@@ -102,3 +102,15 @@ async def list_field_candidates(db: Queryable, session_id: str, field: str | Non
         field,
     )
     return [_candidate(r) for r in rows]
+
+
+async def list_field_candidates_for(db: Queryable, session_ids: list[str]) -> dict[str, list[FieldCandidate]]:
+    """Several sessions' candidates in one query, each list in insertion order."""
+    rows = await db.fetch(
+        f"SELECT {COLUMNS} FROM field_candidates WHERE session_id = ANY($1::uuid[]) ORDER BY id", session_ids
+    )
+    grouped: dict[str, list[FieldCandidate]] = {}
+    for row in rows:
+        candidate = _candidate(row)
+        grouped.setdefault(candidate.session_id, []).append(candidate)
+    return grouped

@@ -298,3 +298,26 @@ async def test_sanitization_oracle_records_every_revision_passes_the_record_orac
     for entry in body["records"]:
         expect_sanitized_record(entry["record"], FAKE_SECRET_VALUES)
     expect_no_leaks(body, FAKE_SECRET_VALUES, True)
+
+
+async def test_the_list_has_every_started_claim_with_a_title_and_progress_and_leaves_out_bare_visits(rig: Any) -> None:
+    db, client, services = rig
+    started = await rich_session(db, services)
+    bare = await seed_session(db.pool)
+    res = await client.get("/api/sessions")
+    assert res.status_code == 200
+    listed = {item["sessionId"]: item for item in res.json()["sessions"]}
+    assert bare not in listed
+    item = listed[started]
+    assert set(item) == {
+        "sessionId",
+        "title",
+        "status",
+        "outcome",
+        "callActive",
+        "progress",
+        "createdAt",
+        "lastActivityAt",
+    }
+    assert item["progress"]["total"] > 0 and 0 < item["progress"]["done"] <= item["progress"]["total"]
+    expect_no_leaks(res.json(), FAKE_SECRET_VALUES)

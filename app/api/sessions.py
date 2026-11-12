@@ -24,18 +24,19 @@ from fastapi.responses import JSONResponse, Response
 
 from app.config import Secret
 from app.db.repos.events import list_events
-from app.db.repos.field_candidates import list_field_candidates
+from app.db.repos.field_candidates import list_field_candidates, list_field_candidates_for
 from app.db.repos.input_requests import get_open_input_request
 from app.db.repos.outbox import list_outbox
 from app.db.repos.records import list_records
-from app.db.repos.sessions import Session, get_session
+from app.db.repos.sessions import Session, get_session, list_started_sessions
 from app.db.repos.timers import list_timers
 from app.db.repos.transcript_lines import list_transcript_lines
 from app.db.repos.turn_metrics import list_turn_metrics
 from app.db.repos.usage import list_usage
-from app.domain.fields import RECORD_FIELD_IDS
+from app.domain.fields import RECORD_FIELD_IDS, REQUIRED_RECORD_FIELDS
 from app.domain.outcome import missing_required
 from app.domain.record import project_value
+from app.domain.session_name import session_title
 from app.metrics.usage import session_cost
 from app.protocol.session import parse_session_id
 from app.session.commands import CommandProcessor, SessionNotFoundError
@@ -180,6 +181,31 @@ def session_read_router(
         if session is None:
             return _json(404, {"error": "not_found", "message": "No such session."})
         return session
+
+    @router.get("/api/sessions")
+    async def listing() -> Response:
+        """Every claim someone started, newest activity first, for the start screen. No per-user filtering: there are no accounts."""
+        sessions = await list_started_sessions(pool)
+        candidates = await list_field_candidates_for(pool, [s.id for s in sessions])
+        items = []
+        for session in sessions:
+            resolved = resolve_fields(candidates.get(session.id, []))
+            items.append(
+                {
+                    "sessionId": session.id,
+                    "title": session_title(resolved),
+                    "status": session.status,
+                    "outcome": session.outcome,
+                    "callActive": session.active_call_id is not None,
+                    "progress": {
+                        "done": sum(1 for f in REQUIRED_RECORD_FIELDS if resolved[f].status == "valid"),
+                        "total": len(REQUIRED_RECORD_FIELDS),
+                    },
+                    "createdAt": iso(session.created_at),
+                    "lastActivityAt": iso(session.last_activity_at),
+                }
+            )
+        return _json(200, {"sessions": items})
 
     @router.get("/api/sessions/{session_id}")
     async def summary(session_id: str) -> Response:

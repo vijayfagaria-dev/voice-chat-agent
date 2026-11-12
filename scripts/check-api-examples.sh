@@ -77,6 +77,7 @@ check "POST /sessions/:sessionId/files (text file)" 415 '"unsupported_type"' -X 
 check "POST /sessions/:sessionId/files (no file)" 400 '"bad_request"' -X POST "$BASE/sessions/$SESSION/files"
 
 # Read API
+check "GET /api/sessions" 200 '"sessions":' "$BASE/api/sessions"
 check "GET /api/sessions/:id" 200 '"status":"active"' "$BASE/api/sessions/$SESSION"
 check "GET /api/sessions/:id/timeline" 200 '"session.created"' "$BASE/api/sessions/$SESSION/timeline"
 check "GET /api/sessions/:id/records" 200 '"records":[]' "$BASE/api/sessions/$SESSION/records"
@@ -117,7 +118,7 @@ fi
 
 # The README must still document each endpoint exercised above.
 for endpoint in \
-  "GET /healthz" "GET /readyz" "POST /sessions/:sessionId/files" "GET /api/sessions/:id" "GET /api/sessions/:id/timeline" \
+  "GET /healthz" "GET /readyz" "POST /sessions/:sessionId/files" "GET /api/sessions" "GET /api/sessions/:id" "GET /api/sessions/:id/timeline" \
   "GET /api/sessions/:id/records" "GET /files/:fileId" "POST /hooks/records" "GET /hooks/records" "POST /api/sessions" \
   "POST /api/sessions/:id/finalize" "WS /chat" "WS /call"; do
   documented "$endpoint"

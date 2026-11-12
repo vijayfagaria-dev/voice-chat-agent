@@ -100,3 +100,18 @@ async def list_active_session_ids(db: Queryable) -> list[str]:
     """Ids of the sessions still collecting (status `active`), most recently active first: boot reconciliation (P4-T01)."""
     rows = await db.fetch("SELECT id FROM sessions WHERE status = 'active' ORDER BY last_activity_at DESC, id")
     return [r["id"] for r in rows]
+
+
+async def list_started_sessions(db: Queryable, limit: int = 50) -> list[Session]:
+    """The sessions someone actually used (a call or a field), most recently active first: the start screen's list.
+
+    A visit that never did anything leaves a bare row; it isn't a claim anyone would want to resume, so it is left out.
+    """
+    rows = await db.fetch(
+        f"""SELECT {COLUMNS} FROM sessions s
+     WHERE EXISTS (SELECT 1 FROM field_candidates f WHERE f.session_id = s.id)
+        OR EXISTS (SELECT 1 FROM calls c WHERE c.session_id = s.id)
+     ORDER BY last_activity_at DESC, id LIMIT $1""",
+        limit,
+    )
+    return [_session(r) for r in rows]
