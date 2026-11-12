@@ -59,9 +59,7 @@ export function formatField(name: string, v: unknown): string {
       return day(date);
     }
     case "urgency": {
-      const level = capitalize(text(v.level));
-      const reason = text(v.reason);
-      return reason ? `${level}: ${reason}` : level || formatValue(v);
+      return capitalize(text(v.level)) || formatValue(v);
     }
     case "serialNumber":
       return `${v.kind === "imei" ? "IMEI" : "Serial"} ${text(v.value)}`.trim();

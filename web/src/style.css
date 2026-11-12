@@ -161,6 +161,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 .record dt { color: var(--muted); text-transform: capitalize; }
 .record dd { margin: 0; overflow-wrap: anywhere; }
 .record .src, .record .status { margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 10.5px; background: #eef1f3; color: var(--muted); }
+.record dd.none { color: var(--muted); }
 .record dd.flagged .status { background: #fde2e7; color: var(--danger); }
 .record summary { cursor: pointer; color: var(--link); }
 .record pre { margin: 6px 0 0; padding: 8px; max-height: 260px; overflow: auto; background: #f6f8f9; border-radius: 6px; font-size: 11.5px; }

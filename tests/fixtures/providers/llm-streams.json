@@ -1,6 +1,6 @@
 {
  "capturedOn": "2026-11-10",
- "promptPrefixHash": "cd19df58e0d259550fafb6f8367e8183f4d2a4a72903d8f3c779d54768afbae6",
+ "promptPrefixHash": "eefa8c01f8e1f2385c7b37aa79bde8219af4db71150489c368088adbc06d289a",
  "source": "real streams through agent/llm.ts (P5-T01 capture); response ids removed",
  "groq": {
   "turn": {
@@ -537,7 +537,7 @@
     }
    ]
   },
-  "prefixPromptTokens": 1565
+  "prefixPromptTokens": 1573
  },
  "gemini": {
   "turn": {

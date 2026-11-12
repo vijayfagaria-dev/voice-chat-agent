@@ -87,7 +87,6 @@ export function useCall(ui: Ui, server: Server | null): CallControls {
     ws.onclose = (event) => {
       // A proxy may replace the server's close code (Render does), so the code in the `closing` message wins.
       const code = noticed?.code ?? event.code;
-      const reason = noticed?.reason ?? event.reason;
       release();
       const refused = callCloseMessage(code);
       if (connected && refused) {
@@ -96,7 +95,7 @@ export function useCall(ui: Ui, server: Server | null): CallControls {
         ui.addNote(refused);
       } else if (connected) {
         ui.setCall(CallState.ENDED, "call ended");
-        ui.addNote(`Call ended${reason ? `: ${reason}` : ""}`);
+        ui.addNote("Call ended");
       } else {
         ui.setCall(CallState.ERROR, `Could not connect to ${server.http}`);
       }

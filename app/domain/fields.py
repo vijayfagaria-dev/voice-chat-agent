@@ -245,7 +245,7 @@ _DEFINITIONS: tuple[FieldDefinition, ...] = (
     FieldDefinition(
         id="urgency",
         label="urgency",
-        description=f"how soon they need the device back: {', '.join(URGENCY_LEVELS)}, with the reason if they give one",
+        description=f"how soon they need the device back: {', '.join(URGENCY_LEVELS)}, and, if they give a reason, only the why in a few words",
         primary_channel="call",
         required=True,
         authority="either",
