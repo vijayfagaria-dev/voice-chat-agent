@@ -1,172 +1,158 @@
-# voice-chat-agent
+# Riya: a voice and chat assistant for device repair claims
 
 Ported to Python (FastAPI) from an earlier TypeScript prototype.
 
-## 1. Overview
+**Live demo:** https://device-repair-agent.onrender.com/ (free hosting sleeps when idle, so the first load can take about a minute; please use made-up data).
 
-A customer reports a faulty device by **voice call** to an agent named Riya. Things that are awkward to say aloud (serial number or IMEI, purchase invoice, service centre, email) arrive as **cards in a chat** on the same page while the call continues. A message box in the chat is always available, so the customer can also just type. Voice and chat are two views of one session; every session ends in **one validated, versioned JSON record**, delivered to a webhook exactly once in effect.
+## What it is
 
-**Live:** https://device-repair-agent.onrender.com/ (free hosting sleeps when idle, so the first load can take about a minute; use made-up data only). A start screen lists claims, with Resume, View and Delete (soft delete).
+A customer wants to register a repair for a broken phone or laptop. Instead of filling in a form, they **talk to an assistant called Riya**. Things that are hard to say out loud (a serial number, an invoice, an email address) show up as **small cards in a chat next to the call**, and the customer can also just type a message at any time. When they confirm, the app produces **one clean, checked record** of the claim and sends it on to a webhook.
 
-## 2. Architecture
+The call and the chat are not two separate systems. They are two ways of talking to the same conversation, so nothing has to be said twice.
+
+## A walk through one claim
+
+1. The customer opens the page and taps the phone button. Riya greets them and asks five simple questions by voice: what kind of device, which model, what's wrong, when it started, how urgent it is. They can interrupt her at any time.
+2. When the voice questions are done, Riya says "I've sent you a box for your serial number", and **at that moment** a card appears in the chat. The customer types the number; Riya says "Got it" and moves on to the invoice (a file upload), the service centre (a pick list) and an email address. One card at a time, always in step with what she says.
+3. At the end Riya reads the main details back, and a "Submit claim?" card shows the full summary. The claim is only submitted when the customer taps **Yes**.
+4. If the call drops, the page tries to reconnect by itself, and if it can't, the chat simply carries on from exactly where things were. The customer can come back to the same claim later from the start screen.
+5. The result is one structured record, checked against a schema and delivered to a webhook exactly once.
+
+## How it is built
 
 ```mermaid
 flowchart LR
-  UI["React UI in the browser"]
-  subgraph S["FastAPI server, one process"]
-    CALL["Call engine: STT, LLM with tools, TTS"]
-    CHAT["Chat socket and chat agent"]
-    FLOW["Flow and chat planner"]
-    PROC["Command processor"]
-    REC["Record builder and outcome rules"]
-    OUT["Outbox worker and timers"]
-  end
-  DB[("Postgres on Neon")]
-  DG["Deepgram STT and TTS"]
-  LLM["Groq gpt-oss-20b, then 120b, then Gemini"]
-  HOOK["Record webhook"]
-  UI -->|"WS /call: mic audio"| CALL
-  UI -->|"WS /chat: cards, messages"| CHAT
-  CALL --> DG
-  CALL --> LLM
-  CALL --> PROC
-  CHAT --> PROC
-  FLOW --> PROC
-  PROC --> DB
-  PROC -->|"events, after commit"| CALL
-  PROC -->|"events, after commit"| CHAT
-  PROC --> REC
-  OUT --> DB
-  OUT --> HOOK
+  B["Browser: call and chat page"]
+  S["Server (Python, FastAPI)"]
+  D[("Database (Postgres)")]
+  V["Speech services (Deepgram)"]
+  L["Language model (Groq, Gemini as backup)"]
+  W["Webhook for finished records"]
+  B -->|voice| S
+  B -->|chat| S
+  S --> D
+  S --> V
+  S --> L
+  S --> W
 ```
 
-- **One session, no per-channel state.** Every change is a command run by one processor under the session's row lock: state tables plus an append-only `events` row in one transaction, published to both sockets only after commit. A reload, a second tab or a restart replays the same conversation from Postgres.
-- **Values are candidates.** An answer from the call or a card is appended as a candidate; the effective value of a field, and any conflict, is recomputed from them.
-- **The call** is a cascaded pipeline on the server (Deepgram Nova-3 STT, the LLM with tools, Deepgram Aura-2 TTS); provider keys never reach the browser. On barge-in the server stops audio, aborts the model and truncates the transcript to what was heard.
-- **Stack:** Python/FastAPI (required by the brief); a free-tier model (`gpt-oss-20b`) so spend stays $0; Postgres for state, files, timers and outbox, so one store is restored after a restart.
+- **One conversation, two doors.** Voice and chat both go through the same server and write to the same database. Every change is saved as a small event that both the call and the chat are told about. So when the customer submits a card in the chat, Riya hears about it within a moment and acknowledges it; when they type a message, she treats it like something they said.
+- **The server owns the order, the AI owns the words.** The server decides what happens next (voice questions first, then one card at a time, then the summary). The language model only decides how to say it. This is what keeps the cards and Riya's speech in step.
+- **The AI must quote the customer.** Riya can only write a value into the claim if she quotes the customer's own words, and the server checks that quote. Dates like "last Tuesday" are worked out by code, not by the model. A serial number or email must be typed, never just heard.
+- **Nothing lives only in memory.** Everything (conversation, files, timers, the delivery queue) is in the database, so a restart loses nothing.
 
-## 3. Conversation flow
+Why these choices: Python/FastAPI because the assignment asks for it; free-tier services (Deepgram, Groq `gpt-oss-20b`, Neon, Render) so the real spend is $0; and one database for everything so there is one place to recover from.
 
-1. The customer taps Call. Riya asks five questions by voice, in a fixed order: device type, model, problem, when it started, urgency.
-2. The system, not the model, owns the order (`app/agent/flow.py`). After the voice questions it opens the chat cards one at a time (serial/IMEI, invoice, service centre, email), each at the start of the turn in which Riya announces it, so the card and her words arrive together. The model is told one `nextStep` per turn.
-3. When everything required is in, the "Submit claim?" card opens and Riya reads the main details back. Only a tap on Yes submits; a spoken yes does not.
-4. **Chat to voice:** a card answer commits, the event reaches the call engine, and Riya acknowledges it when idle. A message typed with no card open is treated by the call agent as something the customer said, and can be saved.
-5. **Call to chat:** when the call ends (hang-up, drop, restart), the planner opens the next missing card in chat; typed messages are answered by a chat agent with the same prompt, tools and state. A returning call is told what was collected.
+## The final record
 
-Identifiers must be typed: a serial number or email heard on the call is stored as `unverified` and never satisfies the field.
-
-## 4. Final record and data integrity
-
-Trimmed example (`shared/record.schema.json` is the full schema, checked on write and again by the receiver):
+Every session ends in one JSON record. A shortened example:
 
 ```json
 {
-  "schemaVersion": "1.0",
   "sessionId": "0b6f4c1e-3d2a-4e8b-9a71-5c2d8e9f1a3b",
-  "revision": 2,
+  "revision": 1,
   "outcome": "completed",
-  "outcomeReason": "all required fields valid; user confirmed submission",
-  "previousRevision": { "revision": 1, "outcome": "partial" },
   "fields": {
-    "deviceModel": { "value": { "brand": "Apple", "model": "iPhone 14 Pro" }, "source": "call", "collectedAt": "2026-11-10T10:00:40+05:30", "status": "valid" },
-    "problemStartedAt": { "value": { "date": "2026-11-03", "precision": "day", "spoken": "last Tuesday" }, "source": "call", "collectedAt": "…", "status": "valid" },
-    "serialNumber": { "value": { "kind": "imei", "value": "352099001761481" }, "source": "chat", "collectedAt": "…", "status": "valid" },
-    "additionalPhotos": { "value": null, "source": "chat", "collectedAt": "…", "status": "skipped" }
+    "deviceModel": { "value": { "brand": "Apple", "model": "iPhone 14" }, "source": "call", "status": "valid" },
+    "serialNumber": { "value": { "kind": "imei", "value": "352099001761481" }, "source": "chat", "status": "valid" },
+    "additionalNotes": { "value": null, "source": "chat", "status": "skipped" }
   },
   "missingRequired": [],
-  "conflicts": [{ "field": "email", "callValue": "asha.rao@example.com", "chatValue": "Asha.Rao@example.com", "resolution": "same", "reason": "values equal after normalization" }],
+  "conflicts": [],
   "reviewFlags": [],
-  "submitConfirmation": { "confirmed": true, "source": "chat", "at": "…" },
-  "costUsd": 0.0123, "costBreakdownUsd": { "stt": 0.004, "llm": 0.0021, "tts": 0.0062, "vision": 0 }, "actualSpendUsd": 0
+  "costUsd": 0.057
 }
 ```
 
-- **Validation and normalization** run server-side on every value (IMEI Luhn check, "last Tuesday" resolved in code against the session's date, brands canonicalised, select values checked against the server's list). A field is `valid`, `invalid`, `unverified`, `skipped` or missing (listed in `missingRequired`). `source` is `call` or `chat`, per field.
-- **Grounding:** the model saves a value only with the customer's own words as evidence, checked against what they said.
-- **Conflicts** (call and chat disagree) are resolved by policy and recorded: typed wins for identifiers, the call for narrative fields.
-- **Outcomes:** `completed` (submitted, all required valid), `partial` (idle with something missing or unverified), `optedOut` (confirmed stop), `needsReview` (safety hazard flagged, unresolved identifier conflict, a field invalid after 3 attempts, or a record that fails its schema). Precedence: `optedOut` > `needsReview` > `completed` > `partial`.
-- **Revisions and delivery:** a returning customer reopens the session; the next finalization writes revision n+1 only if the content hash changed, and earlier revisions are immutable (database triggers). The record, the status change and an `outbox` row commit in one transaction; a worker POSTs it with `Idempotency-Key: <session>:<revision>`, retrying with backoff, and the receiver stores a duplicate once.
+(The full schema is `shared/record.schema.json`; the record is validated against it before it is saved.)
 
-## 5. Reliability and security
+- **Checked and cleaned:** an IMEI must pass its checksum, brands are tidied ("IPhone" becomes "iPhone"), service centres must come from the server's list, files must be real PDFs or images.
+- **Every field says where it came from** (`call` or `chat`) and its status: valid, invalid, skipped, unverified (heard but not typed) or missing. If the call and the chat disagree, a simple rule decides and the disagreement is recorded.
+- **Four possible endings:**
 
-- **Restart recovery:** state, files, persisted timers (idle, expiry) and the outbox live in Postgres. At boot the server ends dangling calls (`server_restart`), re-arms timers, reclaims outbox leases and reconciles active sessions before listening. A restart ends a live call; the customer taps Call again and it resumes from saved state.
-- **Interrupted sessions:** a dropped call hands over to chat, and a new call replaces a quiet one; 15 minutes idle finalizes the session.
-- **Provider failure:** a rate-limited or failed model falls through to the next, then Gemini; an STT drop reconnects once; an exhausted quota refuses voice while chat keeps working.
-- **Secrets** are read from the environment on the server only; CI runs gitleaks and scans the built web bundle for secrets.
-- **Other controls:** Origin check on both sockets, size and rate limits, a concurrent-call cap, a daily quota guard, uploads checked by magic bytes (PDF, JPEG, PNG, WebP, up to 10 MB) and served only through signed, expiring links, user text passed to the model as tagged data, and strict security headers.
-- **Caveat:** there are no accounts. A session id is a capability link, and the start screen lists and can soft-delete every claim on the server (a deliberate demo choice).
-
-## 6. API
-
-| Endpoint | Purpose |
+| Outcome | Meaning |
 |---|---|
-| `GET /healthz`, `GET /readyz` | Liveness (no database) and readiness (checks the database) |
-| `WS /chat?sessionId=` | Cards, messages, record; replays history on connect |
-| `WS /call?sessionId=` | Binary PCM16 mic frames in, agent audio and transcript out |
-| `POST /sessions/:id/files` | Upload an invoice or photo; returns an opaque file reference |
-| `GET /api/sessions` | Claims for the start screen (title, status, progress) |
-| `GET /api/sessions/:id` | Effective value and status of every field, open card, outcome |
-| `GET /api/sessions/:id/timeline` | Events, transcript, per-turn timings, usage and cost, deliveries |
-| `GET /api/sessions/:id/records` | Every revision, oldest first |
-| `DELETE /api/sessions/:id` | Soft delete; refused while a call is on |
-| `GET /files/:id?exp=&sig=` | Signed file link (only inside records) |
-| `POST /hooks/records` | Stub receiver for record delivery (`X-Hook-Secret`, idempotent) |
+| `completed` | The customer confirmed and everything required is valid |
+| `partial` | The customer left with something still missing (the claim can be resumed) |
+| `optedOut` | The customer asked to stop and confirmed |
+| `needsReview` | A person should look: a safety problem was mentioned (swollen battery, smoke), a field kept failing, or the details conflict |
 
-A test-only API is registered only when `ALLOW_TEST_API=true`. Full details: [docs/api.md](docs/api.md).
+- **Coming back later** creates a new revision (revision 2, and so on) only if something changed; older revisions never change.
+- **Delivered once:** the record and its "to be sent" entry are saved together. A worker sends it with a unique key per session and revision, so a retry can never create a duplicate on the receiving side.
 
-## 7. Running locally
+## When things go wrong
 
-Needs Python 3.13 with [uv](https://docs.astral.sh/uv/), Node 22 (to build the UI) and a Postgres database (a free Neon one works).
+- **The call drops:** the page redials automatically (keeping the microphone open), and the server replaces the dead call. If it can't reconnect, the chat takes over.
+- **The server restarts:** a live call ends, but the claim, the open card and the timers are all in the database and come back. Tapping Call resumes where it left off.
+- **The AI service is busy or down:** the app falls back to a second model, then to Gemini. If speech or the free quota fails, voice is politely declined and the chat keeps working.
+- **The customer goes quiet:** silence is not counted while they are busy with a chat card (for example choosing a file).
+
+## Security in brief
+
+Provider keys stay on the server, never in the browser or the repository (CI scans for leaked secrets). Both WebSockets check the page's origin. Uploads are checked by their real file type and size, and are only served through signed, expiring links. There are rate limits, a cap on concurrent calls and a daily quota guard. **One honest caveat:** there are no accounts. A session id works like a private link, and the start screen lists and can delete every claim on the server. That is a deliberate shortcut for the demo.
+
+## API
+
+| Endpoint | What it does |
+|---|---|
+| `WS /call`, `WS /chat` | The voice call (audio in, audio and transcript out) and the chat (cards, messages, record) |
+| `POST /sessions/:id/files` | Upload an invoice or photo |
+| `GET /api/sessions` | The list of claims for the start screen |
+| `GET /api/sessions/:id` | A claim's current fields, open card and outcome |
+| `GET /api/sessions/:id/timeline` | Everything that happened, with timings and cost |
+| `GET /api/sessions/:id/records` | Every revision of the final record |
+| `DELETE /api/sessions/:id` | Hide a claim from the list (soft delete) |
+| `POST /hooks/records` | A built-in receiver for the delivered record |
+| `GET /healthz`, `GET /readyz` | Health checks |
+
+More detail, including errors: [docs/api.md](docs/api.md).
+
+## Run it yourself
+
+You need Python 3.13 with [uv](https://docs.astral.sh/uv/), Node 22 (to build the page) and a Postgres database (a free Neon one works).
 
 ```bash
 uv sync
 cp .env.example .env      # names only; fill in your own values
 npm ci && npm run build -w web
 set -a; . ./.env; set +a
-uv run python -m app      # http://localhost:8080; migrations run at start
+uv run python -m app      # http://localhost:8080 (the database is set up automatically)
 ```
 
-Required: `DATABASE_URL`, `PUBLIC_ORIGIN`, `FILE_URL_SECRET`, `HOOK_SECRET`. Voice also needs `DEEPGRAM_API_KEY` and `GROQ_API_KEY` (`GEMINI_API_KEY` is an optional fallback). Without provider keys the chat, cards, records and API still work; only calls are refused. Tests: `uv run pytest tests` (starts a throwaway Postgres 18, or set `TEST_DATABASE_URL`), `npm test` for the UI, `uv run ruff check app tests && uv run mypy app` for lint and types. Deployment is a Render Blueprint (`render.yaml`, Docker) that deploys only after CI passes.
+The settings you must fill in are `DATABASE_URL`, `PUBLIC_ORIGIN`, `FILE_URL_SECRET` and `HOOK_SECRET`; for voice also `DEEPGRAM_API_KEY` and `GROQ_API_KEY` (`GEMINI_API_KEY` is an optional backup). Without the provider keys, chat, cards, records and the API still work. Tests: `uv run pytest tests` (needs a local Postgres or `TEST_DATABASE_URL`), `npm test` for the page. The project is deployed on Render from `render.yaml`, after the checks in CI pass.
 
-## 8. Cost and performance
+## Cost and speed
 
-Every billable unit is a ledger row priced at the provider's published list price (`app/metrics/prices.py`); real spend is $0 on free tiers, so cost is a list-price equivalent. Latency is server-side, from Deepgram's end-of-utterance event to the first TTS audio frame, for every reply after a user utterance (nearest-rank percentiles). `scripts/report.py` computes both from the production database.
+Cost is the **list price** of what was used (speech, language model), counted per session from a usage ledger; real spend is $0 because everything runs on free tiers. Speed is measured on the server, from the moment Deepgram says the customer stopped talking to the first audio frame of Riya's answer. Both come from `scripts/report.py`, which reads the real database.
 
-**Preliminary, measured (3 completed real sessions, 21 voice turns; the plan's gate is 10 sessions and 50 turns, so this is not final):**
+**Preliminary (3 finished real sessions, 21 spoken turns; the plan calls for 10 sessions and 50 turns, so this is not final):**
 
-| Measure | Result |
+| | Result |
 |---|---|
-| Cost per completed session (list price) | mean $0.057 (Deepgram $0.051, Groq $0.006, Gemini <$0.001) |
-| Server voice latency | p50 1,064 ms, p95 1,762 ms |
-| Browser-side latency (noisy, secondary, n=17) | p50 2,241 ms, p95 5,525 ms |
+| Cost per completed session | about $0.057 (speech $0.051, language model $0.006) |
+| Time to Riya's first audio | median 1.06 s, 95th percentile 1.76 s |
 
-TODO: re-run `scripts/report.py` after the remaining real sessions, with region, browsers and headphones.
+*TODO: re-run `scripts/report.py` after the remaining real sessions and update these numbers.*
 
-## 9. Testing and limitations
+## Tests and honest limitations
 
-About 1,170 Python tests and 90 UI tests. Scenario tests drive a real server through both sockets with fake providers: a card answered during a call, a call dropped then finished in chat, invalid answers (three attempts, then review), conflicting channels, reload and second tab, restart with a live call (crash injection), duplicate delivery, a `partial` resumed as revision 2, opt-out, forged uploads, provider failures. Guards taken from failing live sessions have regression tests.
+About 1,170 Python tests and 96 page tests. Many are scenario tests that run a real server with fake providers: a card answered during a call, a dropped call finished in chat, repeated invalid answers, call and chat disagreeing, a reload, a restart in the middle of a call, duplicate delivery, a returning customer, uploads of fake files. Several guards exist because a real call failed in exactly that way.
 
-**Known limitations**
-- English only; one call at a time (free-tier model rate limit); the free server sleeps when idle.
-- An identifier conflict is not asked about: it ends in `needsReview`.
-- No browser end-to-end tests; sockets and a real server process are tested in Python.
-- Barge-in stop latency is measured only from a spike (about 1.4 s from India against a 1.0 s budget), not on the deployed system.
-- Some calls dropped while the customer chose a file; the likely cause (the file dialog pausing audio capture) is a mitigation, not confirmed.
-- Single instance: rate limits and the call cap are in process memory.
+Known limitations:
+- English only; one call at a time (the free model's rate limit); the free server sleeps when idle.
+- If the call and chat disagree about an email or serial number, it goes to review instead of asking the customer.
+- No browser end-to-end tests. The automatic call redial is tested only as logic, not yet in a real browser.
+- Barge-in (interrupting Riya) is built and tested, but its speed has only been measured in an early experiment (about 1.4 s from India), not on the deployed app.
+- Single server instance: some limits are kept in memory.
 
-**Least trusted: the model's behaviour on a real call.** Tool handling and guards are tested with scripted models, but a free-tier 20B model's choices and wording are only checked by hand, and only a few real sessions have exercised the current flow.
+**What I trust least:** how the free-tier language model behaves on a real call. The guards around it are tested with scripted models, but its choices and wording are only checked by hand, and only a few real calls have used the current flow.
 
-## 10. Decisions and next steps
+## Decisions, and what's next
 
-| Decision | Reason |
-|---|---|
-| The system owns the order; the model owns the words | Left to the model, cards appeared out of step with speech and answers landed in the wrong fields |
-| Typed identifiers; explicit "Submit" tap | Speech recognition is unreliable for alphanumerics; a misheard yes must not submit |
-| Dates resolved in code | Models get date arithmetic wrong |
-| Append-only events and revisions | A full audit trail, and a duplicate can never overwrite a delivered record |
+The main decisions: the server decides the order (the model only speaks); identifiers must be typed; submitting needs an explicit tap; everything is kept as history rather than overwritten.
 
-**With another week:** run the 10 measured sessions and measure barge-in on the deployed server; add a "which is correct?" card for identifier conflicts; Hindi; browser end-to-end tests; accounts, so the claim list is per user.
+With another week: run the ten measured sessions and measure interruption speed on the deployed app; ask the customer to settle conflicting identifiers; add Hindi; browser end-to-end tests; real accounts, so each person sees only their own claims.
 
-**AI tools:** Claude Code wrote most of the code and tests under my direction. It misled me in ways live sessions exposed: a tool-description example value ("Apple iPhone 14 Pro") that the model copied as a real answer, a planner that opened chat cards ahead of the voice, and a microphone-silence check that hung up during file selection.
+**AI tools:** Claude Code wrote most of the code and tests under my direction. It misled me in ways real calls exposed: an example value in a tool description ("Apple iPhone 14 Pro") that the model copied as a real answer, a planner that opened chat cards ahead of Riya's speech, and a microphone check that hung up while the customer was choosing a file.
 
 More detail in [docs/](docs/): architecture, record and outcomes, reliability, security, performance, decisions.
