@@ -37,7 +37,7 @@ describe("starter wire contract", () => {
       "syncDone",
       "closing",
     ]);
-    expect(Object.values(ChatClientMessageType)).toEqual(["inputResponse", "optOut", "say", "clientMetric"]);
+    expect(Object.values(ChatClientMessageType)).toEqual(["inputResponse", "optOut", "say", "callLost", "clientMetric"]);
   });
 
   it("keeps the enum values used in records and input cards", () => {

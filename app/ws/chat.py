@@ -28,7 +28,13 @@ from app.metrics.latency import call_id_of_turn
 from app.protocol.schemas import parse_chat_client_message
 from app.protocol.session import CloseCode, CloseReason
 from app.session.commands import CommandProcessor, UnsupportedCommandError
-from app.session.handlers.chat_input import STALE_REQUEST_MESSAGE, ChatSay, OptOutRequested, SubmitChatInput
+from app.session.handlers.chat_input import (
+    STALE_REQUEST_MESSAGE,
+    ChatSay,
+    OptOutRequested,
+    RecordCallLost,
+    SubmitChatInput,
+)
 from app.session.hub import SessionHub, SessionUpdate
 
 from .chat_projection import (
@@ -251,6 +257,15 @@ class ChatConnection:
                 return
             if result.reply and result.reply.get("status") == "said" and self._deps.agent is not None:
                 self._deps.agent.said(self._session_id)
+        elif kind == "callLost":
+            if not self._within_budget():
+                return
+            report = message.model_dump(mode="json", by_alias=True, exclude={"type"})
+            self._log.info("browser lost the call socket", **{k: v for k, v in report.items() if v is not None})
+            try:
+                await self._deps.processor.dispatch(self._session_id, RecordCallLost(report=report))
+            except Exception as err:
+                self._log.warning("call-lost report not stored", message=str(err))
         elif kind == "optOut":
             if not self._within_budget():
                 self._log.warning("optOut dropped: too many commands on this socket")

@@ -242,6 +242,23 @@ class Say(WireModel):
     text: Annotated[StrictStr, Field(min_length=1, max_length=MAX_SAY_CHARS)]
 
 
+class CallLost(WireModel):
+    """The page's own account of losing the call socket, sent over the chat socket for diagnosis (protocol.md section 3.4)."""
+
+    type: Literal["callLost"] = "callLost"
+    code: Annotated[StrictInt, Field(ge=0, le=4999)]
+    was_clean: StrictBool
+    seconds_on_call: Annotated[StrictInt | StrictFloat, Field(ge=0, le=86_400, allow_inf_nan=False)]
+    #: Milliseconds since the last message from the server / the last agent audio (None: none yet).
+    since_server_ms: Annotated[StrictInt | StrictFloat, Field(ge=0, le=86_400_000, allow_inf_nan=False)] | None = None
+    since_agent_audio_ms: Annotated[StrictInt | StrictFloat, Field(ge=0, le=86_400_000, allow_inf_nan=False)] | None = (
+        None
+    )
+    on_line: StrictBool
+    visibility: Annotated[StrictStr, Field(max_length=16)]
+    audio_state: Annotated[StrictStr, Field(max_length=16)]
+
+
 class ClientMetric(WireModel):
     """Client-side turn latency probe (protocol.md section 3.4; P11-T02)."""
 
@@ -252,7 +269,9 @@ class ClientMetric(WireModel):
     at: Annotated[StrictStr, Field(min_length=1, max_length=40)]
 
 
-ChatClientMessage = Annotated[InputResponse | OptOutRequest | Say | ClientMetric, Field(discriminator="type")]
+ChatClientMessage = Annotated[
+    InputResponse | OptOutRequest | Say | CallLost | ClientMetric, Field(discriminator="type")
+]
 
 
 class UploadResponse(BaseModel):

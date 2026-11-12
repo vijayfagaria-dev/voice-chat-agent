@@ -322,3 +322,8 @@ def chat_say_handler(snapshot: Snapshot, command: Any) -> Effects:
         activity=True,
         reply={"status": "said"},
     )
+
+
+def record_call_lost_handler(snapshot: Snapshot, command: Any) -> Effects:
+    """Keeps the browser's report of a lost call socket on the timeline, so a drop can be diagnosed from the database."""
+    return Effects(events=[EventDraft(type="client.call_lost", channel="system", payload=dict(command.report))])

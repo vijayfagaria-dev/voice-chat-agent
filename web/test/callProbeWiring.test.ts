@@ -1,5 +1,5 @@
 // P11-T02: the call socket's messages feed the probe, and a sample leaves through the sink useChat registers.
-import { CallServerMessageType, type ClientMetric, Role } from "@voice-chat-agent/shared/protocol";
+import { CallServerMessageType, type CallLost, type ClientMetric, Role } from "@voice-chat-agent/shared/protocol";
 import { describe, expect, it, vi } from "vitest";
 import type { Ui } from "../src/state/ui";
 
@@ -21,7 +21,7 @@ function speak(speechMs: number, quietMs: number) {
 
 describe("call messages → latency probe", () => {
   it("an agent line then audio after the user's speech sends one clientMetric through the registered sink", () => {
-    const sent: ClientMetric[] = [];
+    const sent: (ClientMetric | CallLost)[] = [];
     const unregister = registerMetricSink((m) => sent.push(m));
     latencyProbe.reset();
     speak(500, 600);
@@ -30,7 +30,7 @@ describe("call messages → latency probe", () => {
     handleCallMessage(ui, audio);
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ name: "turnLatency", turnId: "ta_c1_2" });
-    expect(sent[0]?.ms).toBeGreaterThan(0);
+    expect((sent[0] as ClientMetric).ms).toBeGreaterThan(0);
     unregister();
   });
 
@@ -44,7 +44,7 @@ describe("call messages → latency probe", () => {
   });
 
   it("a user line never names a turn", () => {
-    const sent: ClientMetric[] = [];
+    const sent: (ClientMetric | CallLost)[] = [];
     const unregister = registerMetricSink((m) => sent.push(m));
     latencyProbe.reset();
     speak(500, 600);

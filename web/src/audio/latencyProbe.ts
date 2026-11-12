@@ -2,7 +2,7 @@
 // first audio is *scheduled to play*. A secondary number, reported separately from the server's: it hears the room,
 // so an echo from speakers (no headphones) or a noisy mic can fake a speech end. It is only a sample; the server joins
 // it to the turn by id and the report says how it was taken.
-import { ChatClientMessageType, type ClientMetric } from "@voice-chat-agent/shared/protocol";
+import { ChatClientMessageType, type CallLost, type ClientMetric } from "@voice-chat-agent/shared/protocol";
 
 /** Mic RMS (0..1) at or above this counts as speech. */
 export const SPEECH_LEVEL = 0.02;
@@ -69,9 +69,9 @@ export class LatencyProbe {
 
 // The page's probe. useChat owns the /chat socket and registers how to send; without one (demo mode, a closed socket)
 // samples are dropped.
-let sink: ((metric: ClientMetric) => void) | null = null;
+let sink: ((metric: ClientMetric | CallLost) => void) | null = null;
 
-export function registerMetricSink(next: (metric: ClientMetric) => void): () => void {
+export function registerMetricSink(next: (metric: ClientMetric | CallLost) => void): () => void {
   sink = next;
   return () => {
     if (sink === next) sink = null;
@@ -79,3 +79,6 @@ export function registerMetricSink(next: (metric: ClientMetric) => void): () => 
 }
 
 export const latencyProbe = new LatencyProbe((metric) => sink?.(metric));
+
+/** Sends a diagnostic over the chat socket when it is open (dropped otherwise). */
+export const sendDiagnostic = (report: CallLost): void => sink?.(report);

@@ -157,6 +157,19 @@ export interface Say {
   text: string;
 }
 
+/** The page's account of losing the call socket, sent over the chat socket for diagnosis (protocol.md §3.4). */
+export interface CallLost {
+  type: ChatClientMessageType.CALL_LOST;
+  code: number;
+  wasClean: boolean;
+  secondsOnCall: number;
+  sinceServerMs?: number;
+  sinceAgentAudioMs?: number;
+  onLine: boolean;
+  visibility: string;
+  audioState: string;
+}
+
 /** Client-side turn latency probe (protocol.md §3.4; P11-T02). */
 export interface ClientMetric {
   type: ChatClientMessageType.CLIENT_METRIC;
@@ -166,7 +179,7 @@ export interface ClientMetric {
   at: string;
 }
 
-export type ChatClientMessage = InputResponse | OptOutRequest | Say | ClientMetric;
+export type ChatClientMessage = InputResponse | OptOutRequest | Say | CallLost | ClientMetric;
 
 export interface UploadResponse {
   url: string;

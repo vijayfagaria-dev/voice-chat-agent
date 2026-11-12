@@ -37,5 +37,13 @@ class ChatSay:
 
 
 @dataclass(frozen=True, slots=True)
+class RecordCallLost:
+    """The page's account of losing the call socket (diagnosis only: no user activity, nothing the customer sees)."""
+
+    type: ClassVar[str] = "RecordCallLost"
+    report: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
 class OptOutRequested:
     type: ClassVar[str] = "OptOutRequested"

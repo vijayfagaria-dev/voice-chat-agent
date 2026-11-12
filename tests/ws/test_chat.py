@@ -265,3 +265,24 @@ class TestKeepaliveAndShutdown:
             assert elapsed_ms < SHUTDOWN_CLOSE_GRACE_MS + 1_500
         finally:
             raw.destroy()
+
+
+class TestCallLost:
+    async def test_the_pages_account_of_a_lost_call_lands_on_the_timeline(self, db, server):
+        id_ = str(uuid.uuid4())
+        socket = connect(chat_url(server.ws, f"?sessionId={id_}"))
+        await socket.opened
+        await wait_for_session(db, id_)
+        await socket.send(
+            '{"type": "callLost", "code": 1006, "wasClean": false, "secondsOnCall": 41, "sinceServerMs": 3200,'
+            ' "onLine": true, "visibility": "visible", "audioState": "running"}'
+        )
+        for _ in range(100):
+            events = [e for e in await list_events(db.pool, id_) if e.type == "client.call_lost"]
+            if events:
+                break
+            await asyncio.sleep(0.02)
+        [event] = events
+        assert event.channel == "system"
+        assert event.payload["code"] == 1006 and event.payload["secondsOnCall"] == 41
+        await socket.close()

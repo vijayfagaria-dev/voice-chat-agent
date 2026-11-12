@@ -25,10 +25,11 @@ from .handlers.call import (
     end_call_handler,
     flag_for_review_handler,
     opt_out_by_call_handler,
+    record_call_lost_handler,
     save_spoken_field_handler,
     start_call_handler,
 )
-from .handlers.chat_input import ChatSay, OptOutRequested, SubmitChatInput
+from .handlers.chat_input import ChatSay, OptOutRequested, RecordCallLost, SubmitChatInput
 from .handlers.finalize import Finalize, FinalizeDeps, finalize_handler, finalize_prepare
 from .handlers.opt_out import opt_out_handler
 from .handlers.request_input import (
@@ -104,6 +105,7 @@ def create_session_services(
     processor.register("EndCall", end_call_handler, command_class=EndCall)
     processor.register("AppendTranscript", append_transcript_handler, command_class=AppendTranscript)
     processor.register("ChatSay", chat_say_handler, command_class=ChatSay)
+    processor.register("RecordCallLost", record_call_lost_handler, command_class=RecordCallLost)
     processor.register("AgentSays", agent_says_handler, command_class=AgentSays)
     processor.register("SaveSpokenField", save_spoken_field_handler, command_class=SaveSpokenField)
     processor.register("FlagForReview", flag_for_review_handler, command_class=FlagForReview)

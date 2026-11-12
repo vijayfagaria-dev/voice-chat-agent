@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { latencyProbe } from "../audio/latencyProbe";
+import { currentAudioContext } from "../audio/context";
+import { latencyProbe, sendDiagnostic } from "../audio/latencyProbe";
 import * as mic from "../audio/mic";
 import type { Server } from "../config";
 import { callCloseMessage } from "../lib/closeCodes";
 import { errorMessage } from "../lib/errors";
-import { MIC_FRAME_BYTES, MIC_FRAME_MS } from "@voice-chat-agent/shared/protocol";
+import { ChatClientMessageType, MIC_FRAME_BYTES, MIC_FRAME_MS } from "@voice-chat-agent/shared/protocol";
 import { CallState } from "../state/conversation";
 import type { CallControls, Ui } from "../state/ui";
 import { handleCallMessage } from "../transport/callMessages";
@@ -73,14 +74,20 @@ export function useCall(ui: Ui, server: Server | null): CallControls {
       }
       ws.binaryType = "arraybuffer";
       let connected = false;
+      let openedAt = 0;
+      let lastServerAt = 0;
+      let lastAudioAt = 0;
       ws.onopen = () => {
         connected = true;
+        openedAt = lastServerAt = performance.now();
         redials = 0;
         ui.setCall(CallState.CONNECTED, "on call");
         ui.addNote(redialing ? "Call reconnected" : "Call started");
       };
       let noticed: { code: number; reason: string } | null = null; // from the server's `closing` message
       ws.onmessage = ({ data }) => {
+        lastServerAt = performance.now();
+        if (typeof data === "string" && data.startsWith('{"type":"audio"')) lastAudioAt = lastServerAt;
         const closing = parseClosing(data);
         if (closing) noticed = closing;
         else handleCallMessage(ui, data);
@@ -92,6 +99,21 @@ export function useCall(ui: Ui, server: Server | null): CallControls {
         if (
           shouldRedial({ connected, redialing, noticedCode: noticed?.code ?? null, eventCode: event.code, attempts: redials })
         ) {
+          // Tell the server what the page knew, so a drop can be diagnosed from the timeline (the chat socket is separate).
+          if (connected) {
+            const now = performance.now();
+            sendDiagnostic({
+              type: ChatClientMessageType.CALL_LOST,
+              code: event.code,
+              wasClean: event.wasClean,
+              secondsOnCall: Math.round((now - openedAt) / 1000),
+              sinceServerMs: Math.round(now - lastServerAt),
+              ...(lastAudioAt ? { sinceAgentAudioMs: Math.round(now - lastAudioAt) } : {}),
+              onLine: navigator.onLine,
+              visibility: document.visibilityState,
+              audioState: currentAudioContext()?.state ?? "none",
+            });
+          }
           // Lost, not ended: keep the microphone open and dial again (the old call is replaced on the server).
           if (!redialing) ui.addNote("Connection lost, reconnecting…");
           ui.setCall(CallState.CONNECTING, "reconnecting…");

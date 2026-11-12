@@ -292,3 +292,56 @@ class TestCallMessages:
             "code": 4411,
             "reason": "resume required",
         }
+
+
+class TestCallLost:
+    def test_parses_the_pages_account_of_a_lost_call_socket(self) -> None:
+        raw = {
+            "type": "callLost",
+            "code": 1006,
+            "wasClean": False,
+            "secondsOnCall": 41,
+            "sinceServerMs": 3200,
+            "onLine": True,
+            "visibility": "visible",
+            "audioState": "running",
+        }
+        message = parse_chat_client_message(raw)
+        assert to_wire(message) == raw
+
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            {"type": "callLost"},
+            {
+                "type": "callLost",
+                "code": 99999,
+                "wasClean": False,
+                "secondsOnCall": 1,
+                "onLine": True,
+                "visibility": "v",
+                "audioState": "a",
+            },
+            {
+                "type": "callLost",
+                "code": 1006,
+                "wasClean": "no",
+                "secondsOnCall": 1,
+                "onLine": True,
+                "visibility": "v",
+                "audioState": "a",
+            },
+            {
+                "type": "callLost",
+                "code": 1006,
+                "wasClean": False,
+                "secondsOnCall": -1,
+                "onLine": True,
+                "visibility": "v",
+                "audioState": "a",
+            },
+        ],
+    )
+    def test_rejects_the_wrong_shape(self, bad: dict[str, Any]) -> None:
+        with pytest.raises(ValidationError):
+            parse_chat_client_message(bad)

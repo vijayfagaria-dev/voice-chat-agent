@@ -31,6 +31,7 @@ export enum ChatClientMessageType {
   // Added by protocol.md v1.0 (§3.4).
   OPT_OUT = "optOut",
   SAY = "say",
+  CALL_LOST = "callLost",
   CLIENT_METRIC = "clientMetric",
 }
 
