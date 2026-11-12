@@ -28,7 +28,7 @@ from app.metrics.latency import call_id_of_turn
 from app.protocol.schemas import parse_chat_client_message
 from app.protocol.session import CloseCode, CloseReason
 from app.session.commands import CommandProcessor, UnsupportedCommandError
-from app.session.handlers.chat_input import STALE_REQUEST_MESSAGE, OptOutRequested, SubmitChatInput
+from app.session.handlers.chat_input import STALE_REQUEST_MESSAGE, ChatSay, OptOutRequested, SubmitChatInput
 from app.session.hub import SessionHub, SessionUpdate
 
 from .chat_projection import (
@@ -68,6 +68,8 @@ class ChatSocketDeps:
     processor: CommandProcessor
     #: `sessionState.voiceAvailable`: false while the quota guard would refuse a call (P10-T03). Default: true.
     voice_available: Callable[[], bool] | None = None
+    #: Answers what the customer types with no card open (None: typed messages are saved but nobody answers).
+    agent: Any | None = None
 
 
 def _now_ms() -> float:
@@ -238,6 +240,17 @@ class ChatConnection:
                 self._send(input_error_wire(message.request_id, 0, TOO_FAST_MESSAGE))
                 return
             await self._submit(SubmitChatInput(request_id=message.request_id, field=message.field, value=message.value))
+        elif kind == "say":
+            if not self._within_budget():
+                self._log.warning("say dropped: too many commands on this socket")
+                return
+            try:
+                result = await self._deps.processor.dispatch(self._session_id, ChatSay(text=message.text))
+            except Exception as err:
+                self._log.error("say failed", code=getattr(err, "sqlstate", None), message=str(err))
+                return
+            if result.reply and result.reply.get("status") == "said" and self._deps.agent is not None:
+                self._deps.agent.said(self._session_id)
         elif kind == "optOut":
             if not self._within_budget():
                 self._log.warning("optOut dropped: too many commands on this socket")

@@ -595,7 +595,7 @@ class CallEngine:
             return
         if not spoken.interrupted:
             self._arm_silence()
-        if self._pending:
+        if self._pending or self._pending_user:
             self._schedule_proactive()
 
     def _record_turn_metric(self, turn: _AgentTurn, spoken: SpokenTurn | None, llm_ttft_ms: float | None) -> None:
@@ -811,6 +811,15 @@ class CallEngine:
                     self._note(ChatEventNote(field=field, result="cancelled"))
             elif event.type in ("input.requested", "input.resumed"):
                 self._last_card_at = self._clock.now()
+            elif event.type == "chat.message" and event.channel == "chat":
+                message = payload.get("message")
+                if (
+                    isinstance(message, dict)
+                    and message.get("role") == "user"
+                    and not message.get("requestId")
+                    and isinstance(message.get("text"), str)
+                ):
+                    self._typed(message["text"])
             elif event.type == "session.finalized" and not self._self_finalized:
                 # Finalized from the chat (Stop -> Yes, or Submit -> Yes) during the call: say so and end (P4-T05 -> P5-T09).
                 self._spawn(self._goodbye_then_end(payload.get("outcome") == "optedOut"))
@@ -818,6 +827,14 @@ class CallEngine:
     async def _goodbye_then_end(self, opted_out: bool) -> None:
         await self._say_templated(OPTED_OUT_GOODBYE if opted_out else SUBMITTED_GOODBYE)
         await self._end("opted_out" if opted_out else "agent_ended", (CloseCode.NORMAL, "agent ended"))
+
+    def _typed(self, text: str) -> None:
+        """The customer typed a message in the chat during the call: the agent takes it as something they said (so a
+        value in it can be saved) and answers at the next natural moment, in speech."""
+        self._pending_user.append(f"(typed in the chat) {text}")
+        self._last_card_at = self._clock.now()  # they are busy typing, not silent
+        self._reprompts = 0
+        self._schedule_proactive()
 
     def _note(self, note: ChatEventNote) -> None:
         self._chat_seq += 1
@@ -832,7 +849,7 @@ class CallEngine:
 
     def _proactive_fired(self) -> None:
         self._proactive_timer = None
-        if self._stopping or not self._pending:
+        if self._stopping or not (self._pending or self._pending_user):
             return
         # Not while anyone is speaking or a turn is in flight; the notes then ride along with the next turn.
         if self._turn is not None or self._user_turns.speaking:

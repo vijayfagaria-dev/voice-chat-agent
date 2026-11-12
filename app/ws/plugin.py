@@ -14,6 +14,7 @@ from typing import Any
 
 from fastapi import FastAPI, WebSocket
 
+from app.agent.chat_agent import ChatAgent
 from app.api.client_ip import make_client_ip
 from app.limits.quota_guard import QuotaGuard
 from app.protocol.session import CloseCode, CloseReason
@@ -107,11 +108,17 @@ def mount_websockets(
     )
     state = CallState()
     runtime = WebSocketRuntime(calls=state.active, call_state=state)
+    agent = (
+        ChatAgent(pool=pool, processor=services.processor, llm_factory=lambda: voice.providers().llm, log=log)
+        if voice is not None
+        else None
+    )
     chat_deps = ChatSocketDeps(
         socket=socket_deps,
         hub=services.hub,
         processor=services.processor,
         voice_available=quota.voice_available if quota is not None else None,
+        agent=agent,
     )
     call_deps = CallSocketDeps(socket=socket_deps, hub=services.hub, processor=services.processor, voice=voice)
 

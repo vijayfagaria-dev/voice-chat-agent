@@ -87,6 +87,24 @@ class TestValidConnect:
         await socket.close()
 
 
+class TestSay:
+    async def test_a_typed_message_becomes_the_customers_chat_message_and_is_shown_back(self, db, server):
+        id_ = str(uuid.uuid4())
+        socket = connect(chat_url(server.ws, f"?sessionId={id_}"))
+        await socket.opened
+        await wait_for_session(db, id_)
+        await socket.send('{"type": "say", "text": "  my phone is a Pixel  "}')
+        for _ in range(100):
+            if any(m.get("role") == "user" for m in socket.messages):
+                break
+            await asyncio.sleep(0.02)
+        [said] = [m for m in socket.messages if m.get("role") == "user"]
+        assert said["text"] == "my phone is a Pixel" and said.get("requestId") is None
+        await socket.send('{"type": "say", "text": ""}')  # empty: dropped as invalid
+        assert await closed_within(socket, 200) == "open"
+        await socket.close()
+
+
 class TestRefusals:
     """The upgrade completes, then the server closes with a code and reason."""
 

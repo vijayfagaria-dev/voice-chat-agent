@@ -905,6 +905,40 @@ class TestP5ReviewFixes:
         assert last_state(c.llm)["newChatEvents"] == [{"field": "email", "result": "accepted"}]
         await c.engine.stop("hangup")
 
+    async def test_a_message_typed_in_the_chat_during_the_call_is_taken_as_something_said_and_answered_aloud(
+        self,
+    ) -> None:
+        c = await call(timed_audio=False)
+        await c.step(100)
+        c.llm.enqueue(LlmScript(text="Thanks, I have noted that."))
+        c.port.emit(
+            {
+                "type": "chat.message",
+                "channel": "chat",
+                "payload": {"message": {"id": "m1", "role": "user", "text": "it is a Pixel 8", "requestId": None}},
+            }
+        )
+        await c.step(2_500)
+        users = [m.content for m in c.llm.requests[-1].messages if m.role == "user"]
+        assert users[-1] == "(typed in the chat) it is a Pixel 8"
+        assert "Thanks, I have noted that." in c.tts.current.spoken()
+        await c.engine.stop("hangup")
+
+    async def test_a_card_answer_is_not_mistaken_for_a_typed_message(self) -> None:
+        c = await call(timed_audio=False)
+        await c.step(100)
+        requests_before = len(c.llm.requests)
+        c.port.emit(
+            {
+                "type": "chat.message",
+                "channel": "chat",
+                "payload": {"message": {"id": "m2", "role": "user", "text": "a@b.co", "requestId": "req_email_1"}},
+            }
+        )
+        await c.step(2_500)
+        assert len(c.llm.requests) == requests_before
+        await c.engine.stop("hangup")
+
     async def test_11_if_one_provider_opens_and_the_other_doesnt_the_opened_one_is_closed_again(self) -> None:
         stt = FakeStt()
         tts = FakeTts()
