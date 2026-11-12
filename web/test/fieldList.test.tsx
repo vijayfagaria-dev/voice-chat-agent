@@ -13,3 +13,21 @@ describe("FieldList", () => {
     expect(html).toContain("a@b.co");
   });
 });
+
+describe("FieldList order and skipped fields", () => {
+  it("lists a claim in reading order and says Not provided for a skipped field, not 'needs checking'", () => {
+    const html = renderToStaticMarkup(
+      <FieldList
+        fields={{
+          email: { value: "a@b.co", source: "chat", status: "valid" },
+          additionalNotes: { value: null, source: "chat", status: "skipped" },
+          deviceType: { value: "smartphone", source: "call", status: "valid" },
+        }}
+      />,
+    );
+    expect(html.indexOf("Device type")).toBeLessThan(html.indexOf("Email"));
+    expect(html.indexOf("Email")).toBeLessThan(html.indexOf("Notes"));
+    expect(html).toContain("Not provided");
+    expect(html).not.toContain("needs checking");
+  });
+});

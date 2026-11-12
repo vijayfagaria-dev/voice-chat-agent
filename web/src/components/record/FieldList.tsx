@@ -1,14 +1,14 @@
 import { Fragment } from "react";
 import { FieldStatus } from "@voice-chat-agent/shared/protocol";
-import { fieldLabel, formatField, readField } from "../../lib/record";
+import { fieldLabel, formatField, orderedFields, readField } from "../../lib/record";
 
 export function FieldList({ fields }: { fields: Record<string, unknown> }) {
   return (
     <dl>
-      {Object.entries(fields).map(([name, field]) => {
+      {orderedFields(fields).map(([name, field]) => {
         const { value, status, flagged } = readField(field);
         // Nothing was given for it: say so plainly, not with a red "missing" tag (an optional field left empty is normal).
-        if (status === FieldStatus.MISSING)
+        if (status === FieldStatus.MISSING || status === FieldStatus.SKIPPED)
           return (
             <Fragment key={name}>
               <dt>{fieldLabel(name)}</dt>

@@ -78,7 +78,7 @@ export interface ConversationState {
 
 export function initialState(call: Partial<CallStatus> = {}, notice: string | null = null): ConversationState {
   return {
-    call: { state: CallState.IDLE, text: "online", connectedAt: null, disabled: false, ...call },
+    call: { state: CallState.IDLE, text: "Repair assistant", connectedAt: null, disabled: false, ...call },
     notice,
     items: [],
     transcripts: {},

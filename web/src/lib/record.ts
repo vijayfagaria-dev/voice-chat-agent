@@ -25,6 +25,37 @@ const LABELS: Record<string, string> = {
   additionalNotes: "Notes",
 };
 
+/** The order a claim reads in: the voice questions, then the chat cards, then the optional extras. */
+export const FIELD_ORDER = [
+  "deviceType",
+  "deviceModel",
+  "problemDescription",
+  "problemStartedAt",
+  "urgency",
+  "serialNumber",
+  "purchaseInvoice",
+  "serviceCentre",
+  "email",
+  "additionalPhotos",
+  "additionalNotes",
+];
+
+export function orderedFields(fields: Record<string, unknown>): [string, unknown][] {
+  const rank = (name: string): number => {
+    const at = FIELD_ORDER.indexOf(name);
+    return at === -1 ? FIELD_ORDER.length : at;
+  };
+  return Object.entries(fields).sort(([a], [b]) => rank(a) - rank(b));
+}
+
+/** The same words the chat summary uses, so the card and the chat agree. */
+const URGENCY: Record<string, string> = {
+  low: "No rush",
+  normal: "Within a few days",
+  high: "Urgently (in a day or two)",
+  critical: "Immediately: can't manage without it",
+};
+
 export const fieldLabel = (name: string): string => LABELS[name] ?? name.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/_/g, " ").toLowerCase();
 
 const capitalize = (text: string): string => (text ? text[0]?.toUpperCase() + text.slice(1) : text);
@@ -59,7 +90,7 @@ export function formatField(name: string, v: unknown): string {
       return day(date);
     }
     case "urgency": {
-      return capitalize(text(v.level)) || formatValue(v);
+      return URGENCY[text(v.level)] ?? (capitalize(text(v.level)) || formatValue(v));
     }
     case "serialNumber":
       return `${v.kind === "imei" ? "IMEI" : "Serial"} ${text(v.value)}`.trim();

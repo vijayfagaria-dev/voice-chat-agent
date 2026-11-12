@@ -28,12 +28,13 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
   background: var(--header); color: var(--header-text);
 }
 .avatar {
-  flex: none; width: 40px; height: 40px; border-radius: 50%; overflow: hidden;
-  display: flex; align-items: flex-end; justify-content: center; background: #dfe5e7; color: #fff;
+  flex: none; width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #25d3a3, #0b8f6f); color: #fff; font-size: 18px; font-weight: 650;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.28);
 }
-.avatar svg { width: 34px; height: 34px; fill: #adb5b9; stroke: none; }
 .titles { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.titles h1 { font-size: 16px; font-weight: 500; margin: 0; }
+.titles h1 { font-size: 16px; font-weight: 650; margin: 0; letter-spacing: 0.01em; }
 .status { font-size: 13px; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .status[data-state="error"] { color: #ffd6dc; opacity: 1; }
 .timer { font-variant-numeric: tabular-nums; }
@@ -150,16 +151,16 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 .choices label.choice { display: flex; align-items: center; gap: 10px; color: var(--text); text-align: left; }
 .choices input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
 
-.record { align-self: stretch; margin: 6px 8px; padding: 10px 12px; background: #fff; border-radius: 8px; box-shadow: var(--shadow); font-size: 13.5px; }
+.record { align-self: stretch; margin: 8px 4px; padding: 14px 16px; background: #fff; border-radius: 12px; box-shadow: var(--shadow); font-size: 14px; }
 .record h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 14.5px; font-weight: 600; }
 .record .badge { padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 500; background: #fff3c4; color: #7a5b00; }
 .record .badge.outcome-completed { background: var(--user); color: #0a6b4f; }
 .record .badge.outcome-optedOut { background: #fde2e7; color: #a3002a; }
-.record dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0 0 6px; }
-.record dt { color: var(--muted); text-transform: capitalize; }
-.record dd { margin: 0; overflow-wrap: anywhere; }
+.record dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 6px 0 4px; }
+.record dt { color: var(--muted); }
+.record dd { margin: 0; overflow-wrap: anywhere; font-weight: 500; }
 .record .status { margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 10.5px; background: #eef1f3; color: var(--muted); }
-.record dd.none { color: var(--muted); }
+.record dd.none { color: var(--muted); font-weight: 400; }
 .record dd.flagged .status { background: #fde2e7; color: var(--danger); }
 
 @media (prefers-reduced-motion: no-preference) {

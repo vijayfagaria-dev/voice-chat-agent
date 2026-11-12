@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { sessionLink } from "../../lib/closeCodes";
 import { CallState, isInCall, type CallStatus } from "../../state/conversation";
-import { AvatarIcon, PhoneIcon } from "../icons";
+import { PhoneIcon } from "../icons";
 import { CallTimer } from "./CallTimer";
 import { MicMeter } from "./MicMeter";
 
@@ -36,9 +36,9 @@ export function Header({ call, notice, onCall, onStop, shareable = false }: Prop
   return (
     <>
       <header className="topbar">
-        <div className="avatar" aria-hidden="true"><AvatarIcon /></div>
+        <div className="avatar" aria-hidden="true">R</div>
         <div className="titles">
-          <h1>Assistant</h1>
+          <h1>Riya</h1>
           <span className="status" data-state={call.state}>
             <span className="status-text" role="status" title={call.text}>{call.text}</span>
             {call.connectedAt !== null && <CallTimer since={call.connectedAt} />}
