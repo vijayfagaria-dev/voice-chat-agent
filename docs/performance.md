@@ -1,7 +1,17 @@
 # Cost and latency
 
 <!-- measured:start -->
-> **`PENDING`: no measurement from real sessions exists yet.** The tooling is built and tested (`scripts/report.py`), but a report needs at least 10 completed real sessions and at least 50 voice turns. No cost or latency figure is claimed until it has run on the deployed system.
+> **Measured on the deployed system, 2026-11-12, by `scripts/report.py`** (read-only, from the production database). The gate is met: **11 completed real sessions, 71 voice turns across 22 calls**. Conditions: server on Render (Virginia), customer in India, Chrome, headphones not recorded (speaker echo can distort the browser-side number). The sessions were the author's own manual runs on one day, while fixes were still being deployed between them, so early runs used older code than later ones; they are not a controlled benchmark.
+>
+> | Measure | Result |
+> |---|---|
+> | Cost per completed session (list-price equivalent; actual spend $0) | mean **$0.0547**, median $0.0540, min $0.0313, max $0.0710 (Deepgram $0.0494, Groq $0.0052, Gemini $0.0001) |
+> | **Server voice latency**: STT end-of-utterance → first audio frame sent | **p50 1,101 ms, p95 1,956 ms** (n = 71; mean 1,172, min 507, max 2,474) |
+> | of which the model's first token | p50 511 ms, p95 1,192 ms |
+> | of which TTS first byte | p50 128 ms, p95 137 ms |
+> | Browser-side latency (secondary, noisy; n = 60) | p50 2,311 ms, p95 5,977 ms |
+>
+> Prompt cache: 77 of 180 model requests read from the cache. Barge-in stop latency has **not** been measured on the deployed system (see below).
 <!-- measured:end -->
 
 ## Cost

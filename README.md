@@ -125,14 +125,15 @@ The settings you must fill in are `DATABASE_URL`, `PUBLIC_ORIGIN`, `FILE_URL_SEC
 
 Cost is the **list price** of what was used (speech, language model), counted per session from a usage ledger; real spend is $0 because everything runs on free tiers. Speed is measured on the server, from the moment Deepgram says the customer stopped talking to the first audio frame of Riya's answer. Both come from `scripts/report.py`, which reads the real database.
 
-**Preliminary (3 finished real sessions, 21 spoken turns; the plan calls for 10 sessions and 50 turns, so this is not final):**
+**Measured on the deployed app (11 completed sessions, 71 spoken turns, my own manual runs on one day with fixes deployed in between; server on Render in Virginia, customer in India, Chrome):**
 
 | | Result |
 |---|---|
-| Cost per completed session | about $0.057 (speech $0.051, language model $0.006) |
-| Time to Riya's first audio | median 1.06 s, 95th percentile 1.76 s |
+| Cost per completed session | mean about $0.055 (speech $0.049, language model $0.005); range $0.031 to $0.071 |
+| Time to Riya's first audio (server side) | median 1.10 s, 95th percentile 1.96 s |
+| Same, seen from the browser (noisy) | median 2.3 s, 95th percentile 6.0 s |
 
-*TODO: re-run `scripts/report.py` after the remaining real sessions and update these numbers.*
+*TODO: measure how fast Riya stops talking when interrupted on the deployed app (it needs the model quota, which the free tier had used up), and note whether headphones were worn.*
 
 ## Tests and honest limitations
 
@@ -140,12 +141,13 @@ About 1,170 Python tests and 101 page tests. Many are scenario tests that run a 
 
 Known limitations:
 - English only; one call at a time (the free model's rate limit); the free server sleeps when idle.
+- **The free model quota runs out.** After about ten test sessions in one day, Groq's daily token limit was used up and Riya could only say "One moment." Setting `GEMINI_API_KEY` adds a fallback model; I have not set one.
 - If the call and chat disagree about an email or serial number, it goes to review instead of asking the customer.
 - No browser end-to-end tests. The automatic call redial is tested only as logic, not yet in a real browser.
-- Barge-in (interrupting Riya) is built and tested, but its speed has only been measured in an early experiment (about 1.4 s from India), not on the deployed app.
+- Barge-in (interrupting Riya) is built and tested, but its speed has only been measured in an early experiment (about 1.4 s from India), not on the deployed app. The deployed smoke test (`tests/smoke/deployed_smoke.py`) still assumes the old flow, where a card opens after the first answer, and needs updating before it can measure it.
 - Single server instance: some limits are kept in memory.
 
-**What I trust least:** how the free-tier language model behaves on a real call. The guards around it are tested with scripted models, but its choices and wording are only checked by hand, and only a few real calls have used the current flow.
+**What I trust least:** how the free-tier language model behaves on a real call. The guards around it are tested with scripted models, but its choices and wording are only checked by hand, and only about ten manual sessions have used the current flow.
 
 ## Decisions, and what's next
 
