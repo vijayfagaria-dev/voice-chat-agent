@@ -314,8 +314,14 @@ async def run_turn(deps: TurnDeps, input: TurnInput, sink: TurnSink) -> TurnOutp
         for call, outcome in zip(calls, outcomes, strict=True):
             out.messages.append(LlmMessage(role="tool", tool_call_id=call.id, content=_json(outcome.result)))
         if any(o.end_call for o in outcomes):
-            out.end_call = True
-            break
+            if asked:
+                # A turn that asked the customer something cannot also end the call: they have to answer (live
+                # 2026-11-12: the agent asked "When did the problem start?" and hung up in the same turn).
+                for outcome in outcomes:
+                    outcome.end_call = False
+            else:
+                out.end_call = True
+                break
         # A follow-up round exists to ask the next question or to react to an invalid value. It does not run after the model
         # already asked something, or once the turn's state went stale (the chat event gets its own turn).
         need_follow_up = (

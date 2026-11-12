@@ -496,7 +496,8 @@ class TestPlaybackNotSendingIsWhatCounts:
         await c.engine.stop("hangup")
 
     async def test_end_call_waits_until_the_goodbye_has_played_not_just_been_sent(self) -> None:
-        c = await call(greeting=LlmScript(text=LONG, tool_calls=[{"name": "end_call", "args": {}}]), fast_audio=True)
+        goodbye = LONG.replace("?", ".")  # a turn that asks something cannot end the call
+        c = await call(greeting=LlmScript(text=goodbye, tool_calls=[{"name": "end_call", "args": {}}]), fast_audio=True)
         await c.step(1_000)  # all sent; about 5 s of audio still to play
         assert c.port.of("EndCall") == []
         await c.step(6_000)

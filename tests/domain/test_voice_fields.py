@@ -313,3 +313,18 @@ def test_apple_product_names_get_their_own_casing_whatever_the_speech_recogniser
     ]:
         result = validate_device_model(said)
         assert result.status == "valid" and result.normalized["model"] == model
+
+
+def test_number_words_in_a_model_become_digits_and_a_lone_letter_joins_its_number() -> None:
+    from app.domain.validators.voice_fields import validate_device_model
+
+    cases = [
+        ("Samsung Galaxy Tab s eight", "Galaxy Tab S8"),
+        ("Samsung Galaxy S twenty three", "Galaxy S23"),
+        ("iPhone fourteen", "iPhone 14"),
+        ("OnePlus nine", "9"),
+        ("Xbox one", "Xbox one"),
+    ]
+    for said, model in cases:
+        result = validate_device_model(said)
+        assert result.status == "valid" and result.normalized["model"] == model, said

@@ -128,6 +128,55 @@ _PRODUCT_NAMES = {
 _PRODUCT_CASING = re.compile(rf"\b({'|'.join(_PRODUCT_NAMES)})\b", re.IGNORECASE)
 
 
+_NUMBER_WORDS = {
+    word: value
+    for value, word in enumerate(
+        [
+            "zero",
+            "one",
+            "two",
+            "three",
+            "four",
+            "five",
+            "six",
+            "seven",
+            "eight",
+            "nine",
+            "ten",
+            "eleven",
+            "twelve",
+            "thirteen",
+            "fourteen",
+            "fifteen",
+            "sixteen",
+            "seventeen",
+            "eighteen",
+            "nineteen",
+        ]
+    )
+}
+_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
+
+
+def _model_digits(model: str) -> str:
+    """Speech recognition writes "Galaxy Tab s eight": number words become digits and a lone letter joins its number
+    ("Galaxy Tab S8"). A bare "one" stays a word ("Xbox One")."""
+    tokens, out, i = model.split(), [], 0
+    while i < len(tokens):
+        word = tokens[i].lower().strip(",.")
+        nxt = tokens[i + 1].lower().strip(",.") if i + 1 < len(tokens) else ""
+        if word in _TENS and nxt in _NUMBER_WORDS and 1 <= _NUMBER_WORDS[nxt] <= 9:
+            out.append(str(_TENS[word] + _NUMBER_WORDS[nxt]))
+            i += 2
+        elif word in _TENS or (word in _NUMBER_WORDS and word != "one"):
+            out.append(str(_TENS.get(word, _NUMBER_WORDS.get(word))))
+            i += 1
+        else:
+            out.append(tokens[i])
+            i += 1
+    return re.sub(r"\b([A-Za-z])\s+(\d+)\b", lambda m: f"{m.group(1).upper()}{m.group(2)}", " ".join(out))
+
+
 def detect_brand(text: str) -> str | None:
     tokens = words(text)
     for brand, aliases in BRANDS:
@@ -169,6 +218,7 @@ def validate_device_model(raw: Any, *, allow_unknown: bool = False) -> Validatio
         leading_brand = None
     model = leading_brand.sub("", text, count=1).strip() if leading_brand else text
     model = _PRODUCT_CASING.sub(lambda m: _PRODUCT_NAMES[m.group(1).lower()], model)
+    model = _model_digits(model)
     return valid({"brand": brand, "model": None if model == "" else model})
 
 

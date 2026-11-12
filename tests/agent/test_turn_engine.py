@@ -374,3 +374,18 @@ class TestBrokenStream:
         assert len(t.llm.requests) == 1
         assert out.failed is False
         assert out.messages[-1].content == "What is the brand and model of your phone?"
+
+
+class TestAQuestionCannotEndTheCall:
+    async def test_end_call_in_a_turn_that_asked_something_is_ignored(self) -> None:
+        t = Setup(outcome=lambda call: ToolOutcome(result={"status": "ending"}, ok=True, end_call=True))
+        t.llm.enqueue(LlmScript(text="When did the problem start?", tool_calls=[{"name": "end_call", "args": {}}]))
+        out = await t.go()
+        assert out.end_call is False
+        assert out.spoken == "When did the problem start?"
+
+    async def test_end_call_after_a_goodbye_still_ends_it(self) -> None:
+        t = Setup(outcome=lambda call: ToolOutcome(result={"status": "ending"}, ok=True, end_call=True))
+        t.llm.enqueue(LlmScript(text="Thanks, goodbye!", tool_calls=[{"name": "end_call", "args": {}}]))
+        out = await t.go()
+        assert out.end_call is True
