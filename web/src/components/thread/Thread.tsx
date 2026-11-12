@@ -3,6 +3,7 @@ import { isChoiceKind } from "../../lib/inputs";
 import type { Answer, OpenCard, ThreadItem } from "../../state/conversation";
 import { ChoiceCard } from "../cards/ChoiceCard";
 import { Composer } from "../cards/Composer";
+import { MessageBar } from "../cards/MessageBar";
 import { ThreadEntry } from "./ThreadEntry";
 
 interface Props {
@@ -11,9 +12,11 @@ interface Props {
   items: ThreadItem[];
   card: OpenCard | null;
   onAnswer: (card: OpenCard, answer: Answer) => void;
+  /** Sends a plain typed message. Absent when there is nobody to answer it (no server, demo) or the claim is finished. */
+  onSay?: (text: string) => boolean;
 }
 
-export function Thread({ serverLabel, sessionId, items, card, onAnswer }: Props) {
+export function Thread({ serverLabel, sessionId, items, card, onAnswer, onSay }: Props) {
   useFollowBottom(items, card);
   const answer = (result: Answer) => card && onAnswer(card, result);
   return (
@@ -33,6 +36,7 @@ export function Thread({ serverLabel, sessionId, items, card, onAnswer }: Props)
         ) : (
           <Composer key={card.key} card={card} onAnswer={answer} />
         ))}
+      {!card && onSay && <MessageBar onSend={onSay} />}
     </main>
   );
 }

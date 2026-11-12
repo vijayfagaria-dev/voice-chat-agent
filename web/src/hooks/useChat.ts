@@ -21,7 +21,7 @@ const NOT_CONNECTED =
 export function useChat(
   ui: Ui,
   server: Server | null,
-): { sendInput: SendInput; optOut: () => void } {
+): { sendInput: SendInput; optOut: () => void; say: (text: string) => boolean } {
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -109,7 +109,21 @@ export function useChat(
     }
   }, [ui]);
 
-  const controls = useMemo(() => ({ sendInput, optOut }), [sendInput, optOut]);
+  // A plain message typed with no card open (the message bar). False when the chat isn't connected, so the text stays put.
+  const say = useCallback(
+    (text: string): boolean => {
+      try {
+        openSocket(wsRef.current).send(JSON.stringify({ type: ChatClientMessageType.SAY, text }));
+        return true;
+      } catch (err) {
+        ui.setNotice(err instanceof Error ? err.message : NOT_CONNECTED);
+        return false;
+      }
+    },
+    [ui],
+  );
+
+  const controls = useMemo(() => ({ sendInput, optOut, say }), [sendInput, optOut, say]);
 
   return controls;
 }

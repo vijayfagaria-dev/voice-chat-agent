@@ -22,6 +22,9 @@ export function App() {
   // Stop needs the server (the demo has no session) and only means something while the claim is still open.
   const onStop = !demo && config.backend && state.sessionStatus === "active" ? chat.optOut : undefined;
 
+  // The message box is there whenever the claim is still open and no card is waiting; the agent answers what is typed.
+  const onSay = !demo && config.backend && state.sessionStatus === "active" ? chat.say : undefined;
+
   return (
     <>
       <Header call={state.call} notice={state.notice} onCall={onCall} onStop={onStop} shareable={!demo && config.backend !== null} />
@@ -31,6 +34,7 @@ export function App() {
         items={state.items}
         card={card}
         onAnswer={(open, answer) => submit(open.spec, answer, sendInput)}
+        onSay={onSay}
       />
     </>
   );
