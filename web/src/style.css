@@ -155,18 +155,25 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 .record .badge { padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 500; background: #fff3c4; color: #7a5b00; }
 .record .badge.outcome-completed { background: var(--user); color: #0a6b4f; }
 .record .badge.outcome-optedOut { background: #fde2e7; color: #a3002a; }
-.record .rev { margin-left: auto; font-size: 11px; font-weight: 400; color: var(--muted); }
-.record .reason { margin: 0 0 6px; color: var(--muted); }
 .record dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0 0 6px; }
 .record dt { color: var(--muted); text-transform: capitalize; }
 .record dd { margin: 0; overflow-wrap: anywhere; }
-.record .src, .record .status { margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 10.5px; background: #eef1f3; color: var(--muted); }
+.record .status { margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 10.5px; background: #eef1f3; color: var(--muted); }
 .record dd.none { color: var(--muted); }
 .record dd.flagged .status { background: #fde2e7; color: var(--danger); }
-.record summary { cursor: pointer; color: var(--link); }
-.record pre { margin: 6px 0 0; padding: 8px; max-height: 260px; overflow: auto; background: #f6f8f9; border-radius: 6px; font-size: 11.5px; }
 
 @media (prefers-reduced-motion: no-preference) {
   .meter span { transition: width 80ms linear; }
   .choice:hover, .send:hover { filter: brightness(0.97); }
 }
+
+.picker { max-width: 560px; margin: 0 auto; padding: 24px 16px; }
+.picker h1 { margin: 0 0 16px; font-size: 22px; }
+.picker h2 { margin: 24px 0 8px; font-size: 14px; color: var(--muted); font-weight: 600; }
+.picker-new { width: 100%; padding: 12px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font-size: 16px; cursor: pointer; }
+.picker ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.picker li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: #fff; border-radius: 8px; box-shadow: var(--shadow); }
+.picker li div { display: grid; gap: 2px; min-width: 0; }
+.picker li strong { overflow-wrap: anywhere; }
+.picker li span, .picker-note { color: var(--muted); font-size: 13px; }
+.picker li button { padding: 6px 14px; border: 1px solid var(--accent); border-radius: 6px; background: transparent; color: var(--accent); cursor: pointer; }

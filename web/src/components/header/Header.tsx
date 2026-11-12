@@ -45,6 +45,11 @@ export function Header({ call, notice, onCall, onStop, shareable = false }: Prop
           </span>
         </div>
         {shareable && (
+          <a className="text-btn" href={location.pathname} title="See all claims, or start a new one">
+            All claims
+          </a>
+        )}
+        {shareable && (
           <button className="text-btn" type="button" onClick={copyLink} title="Copy a link to this claim, e.g. to continue on your phone">
             {copied ? "Copied" : "Copy link"}
           </button>
