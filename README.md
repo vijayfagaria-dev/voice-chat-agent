@@ -63,7 +63,3 @@ Without provider keys the chat, cards, records and API still work; only calls ar
 - **No browser end-to-end tests** after the move to Python: the old Playwright specs scripted the TypeScript server's fakes in-process and were dropped. The API, both sockets and a real server process are covered by the Python tests.
 - **Model behaviour is the least-tested part**: tool handling and guards are tested with scripted models, but what the real model says is only checked by hand.
 - **Cost and latency numbers are not yet measured** on the deployed system ([how they will be](docs/performance.md)).
-
-## Built with AI
-
-Claude Code wrote most of the code and tests under my direction. It was fast at the many small exact pieces (validators, state machines, test scaffolding) and at reviewing its own work. It misled me by treating "audio sent" as "audio heard", by writing prompt rules the model then ignored, and by over-constraining the agent's speech until it sounded scripted; each was caught by tests or live calls and fixed.
