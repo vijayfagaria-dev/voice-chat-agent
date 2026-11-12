@@ -29,6 +29,25 @@ export function claimName(claim: Claim): string {
   return claim.title ? `${claim.title} \u00b7 ${shortDate(claim.createdAt)}` : `New claim \u00b7 ${dateAndTime(claim.createdAt)}`;
 }
 
+/** The server's title is "device \u2013 problem" (either may be missing): split for the card's two lines. */
+export function titleParts(claim: Claim): { device: string; problem: string } {
+  if (!claim.title) return { device: "New claim", problem: "" };
+  const at = claim.title.indexOf(" \u2013 ");
+  if (at === -1) return { device: claim.title, problem: "" };
+  const problem = claim.title.slice(at + 3);
+  return { device: claim.title.slice(0, at), problem: problem.charAt(0).toUpperCase() + problem.slice(1) };
+}
+
+/** How the status badge is coloured. */
+export type Tone = "active" | "done" | "stopped" | "review";
+
+export function claimTone(claim: Claim): Tone {
+  if (claim.status === "active") return "active";
+  if (claim.outcome === Outcome.COMPLETED) return "done";
+  if (claim.outcome === Outcome.NEEDS_REVIEW || claim.outcome === Outcome.PARTIAL) return "review";
+  return "stopped";
+}
+
 export function claimStatus(claim: Claim): string {
   if (claim.status === "active") {
     if (claim.callActive) return "On a call";

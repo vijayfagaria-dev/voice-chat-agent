@@ -167,15 +167,34 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
   .choice:hover, .send:hover { filter: brightness(0.97); }
 }
 
-.picker { max-width: 560px; margin: 0 auto; padding: 24px 16px; }
-.picker h1 { margin: 0 0 16px; font-size: 22px; }
-.picker h2 { margin: 24px 0 8px; font-size: 14px; color: var(--muted); font-weight: 600; }
-.picker-new { width: 100%; padding: 12px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font-size: 16px; cursor: pointer; }
-.picker ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.picker li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: #fff; border-radius: 8px; box-shadow: var(--shadow); }
-.picker li div { display: grid; gap: 2px; min-width: 0; }
-.picker li strong { overflow-wrap: anywhere; }
-.picker li span, .picker-note { color: var(--muted); font-size: 13px; }
-.picker li button { padding: 6px 14px; border: 1px solid var(--accent); border-radius: 6px; background: transparent; color: var(--accent); cursor: pointer; }
-.picker-actions { display: flex; gap: 8px; }
-.picker li .picker-delete { border-color: var(--danger); color: var(--danger); }
+.picker { max-width: 640px; margin: 0 auto; padding: 40px 20px 56px; color: var(--text); }
+.picker-head h1 { margin: 0; font-size: 26px; font-weight: 650; letter-spacing: -0.01em; }
+.picker-head p { margin: 6px 0 24px; color: var(--muted); font-size: 15px; }
+.picker h2 { margin: 32px 0 10px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.picker-new { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 14px 16px; border: 0; border-radius: 10px; background: var(--header); color: #fff; font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18); }
+.picker-new span { font-size: 20px; line-height: 1; font-weight: 400; }
+.picker-new:hover { filter: brightness(1.06); }
+.picker-new:focus-visible, .claim button:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+.picker-note { margin: 4px 0; color: var(--muted); font-size: 14px; }
+.claims { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.claim { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; background: #fff; border-radius: 12px; box-shadow: 0 1px 2px rgba(11, 20, 26, 0.12), 0 0 0 1px rgba(11, 20, 26, 0.04); }
+.claim-body { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.claim-device { font-size: 16px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.claim-problem { color: #3b4a54; font-size: 14px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.claim-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin-top: 6px; color: var(--muted); font-size: 12.5px; }
+.claim-status { padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: #eef1f3; color: #44525b; }
+.claim-status.tone-active { background: #e1f3ff; color: #075e8c; }
+.claim-status.tone-done { background: #dcf6e6; color: #0a6b3c; }
+.claim-status.tone-review { background: #fff3c4; color: #7a5b00; }
+.claim-status.tone-stopped { background: #eef1f3; color: #44525b; }
+.claim-actions { display: grid; gap: 6px; flex: none; }
+.claim button { min-width: 84px; padding: 7px 14px; border-radius: 8px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.claim-open { border: 1px solid var(--header); background: var(--header); color: #fff; }
+.claim-open:hover { filter: brightness(1.08); }
+.claim-delete { border: 1px solid transparent; background: transparent; color: #8a2538; }
+.claim-delete:hover { background: #fde9ed; }
+@media (max-width: 480px) {
+  .picker { padding: 24px 14px 40px; }
+  .claim { flex-direction: column; align-items: stretch; }
+  .claim-actions { grid-auto-flow: column; grid-auto-columns: 1fr; }
+}

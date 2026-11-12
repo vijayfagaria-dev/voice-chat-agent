@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { randomId } from "../lib/ids";
-import { type Claim, claimName, claimStatus, isOpen } from "../lib/claims";
+import { type Claim, claimName, claimStatus, claimTone, dateAndTime, isOpen, titleParts } from "../lib/claims";
 
 const base = (import.meta.env.VITE_SERVER_URL?.trim() || "").replace(/\/+$/, "");
 
@@ -36,31 +36,47 @@ export function SessionPicker() {
 
   return (
     <main className="picker">
-      <h1>Device repair claims</h1>
+      <header className="picker-head">
+        <h1>Device repair claims</h1>
+        <p>Pick up where you left off, or start a new claim.</p>
+      </header>
       <button className="picker-new" type="button" onClick={() => openClaim(randomId())}>
-        Start a new claim
+        <span aria-hidden="true">+</span> Start a new claim
       </button>
       <h2>Your claims</h2>
       {failed && <p className="picker-note">Could not load the list. You can still start a new claim.</p>}
       {!failed && claims === null && <p className="picker-note">Loading\u2026</p>}
-      {claims?.length === 0 && <p className="picker-note">Nothing here yet.</p>}
-      <ul>
-        {claims?.map((claim) => (
-          <li key={claim.sessionId}>
-            <div>
-              <strong>{claimName(claim)}</strong>
-              <span>{claimStatus(claim)}</span>
-            </div>
-            <div className="picker-actions">
-              <button type="button" onClick={() => openClaim(claim.sessionId)}>
-                {isOpen(claim) ? "Resume" : "View"}
-              </button>
-              <button type="button" className="picker-delete" onClick={() => remove(claim)}>
-                Delete
-              </button>
-            </div>
-          </li>
-        ))}
+      {claims?.length === 0 && <p className="picker-note">No claims yet. Start one above.</p>}
+      <ul className="claims">
+        {claims?.map((claim) => {
+          const { device, problem } = titleParts(claim);
+          return (
+            <li key={claim.sessionId} className="claim">
+              <div className="claim-body">
+                <strong className="claim-device" title={device}>
+                  {device}
+                </strong>
+                {problem && (
+                  <span className="claim-problem" title={problem}>
+                    {problem}
+                  </span>
+                )}
+                <span className="claim-meta">
+                  <span className={`claim-status tone-${claimTone(claim)}`}>{claimStatus(claim)}</span>
+                  <time dateTime={claim.createdAt}>{dateAndTime(claim.createdAt)}</time>
+                </span>
+              </div>
+              <div className="claim-actions">
+                <button type="button" className="claim-open" onClick={() => openClaim(claim.sessionId)}>
+                  {isOpen(claim) ? "Resume" : "View"}
+                </button>
+                <button type="button" className="claim-delete" onClick={() => remove(claim)}>
+                  Delete
+                </button>
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </main>
   );
