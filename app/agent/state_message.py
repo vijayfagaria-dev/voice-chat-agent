@@ -33,6 +33,8 @@ class ChatEventNote:
     result: Literal["accepted", "rejected", "cancelled", "skipped"]
     #: Rejections of this field's card so far (voice help after 2+).
     rejections: int | None = None
+    #: Why a rejected answer was refused (the validator's own words, e.g. "That IMEI's last digit doesn't match").
+    reason: str | None = None
 
 
 @dataclass(slots=True)
@@ -146,7 +148,12 @@ def build_state(state_input: StateInput) -> dict[str, Any]:
             fields=fields, requests=state_input.requests, just_opened=state_input.just_opened
         )
     result["newChatEvents"] = [
-        {"field": e.field, "result": e.result, **({"rejections": e.rejections} if e.rejections else {})}
+        {
+            "field": e.field,
+            "result": e.result,
+            **({"rejections": e.rejections} if e.rejections else {}),
+            **({"reason": e.reason[:160]} if e.reason else {}),
+        }
         for e in state_input.new_chat_events
     ]
     return result

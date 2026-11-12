@@ -881,7 +881,8 @@ class CallEngine:
                 if status == "invalid":
                     self._rejections[field] = self._rejections.get(field, 0) + 1
                 result: Any = "accepted" if status == "valid" else "skipped" if status == "skipped" else "rejected"
-                self._note(ChatEventNote(field=field, result=result))
+                error = candidate.get("error") if status == "invalid" else None
+                self._note(ChatEventNote(field=field, result=result, reason=error if isinstance(error, str) else None))
             elif event.type == "input.cancelled" and payload.get("reason") == "too many attempts":
                 request = payload.get("request")
                 field = request.get("field") if isinstance(request, dict) else None

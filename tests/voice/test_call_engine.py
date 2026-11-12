@@ -1212,3 +1212,27 @@ class TestTheClaimIsSubmittedWhileRiyaIsStillTalking:
         assert SUBMITTED_GOODBYE in c.tts.current.spoken()
         assert "ta_c1_1" in c.tts.current.cancelled_turns  # the long line was cut, not played to the end
         await c.engine.stop("hangup")
+
+
+class TestARejectedAnswerCarriesItsReason:
+    async def test_the_model_is_told_why_the_card_was_refused_so_it_can_say_so(self) -> None:
+        c = await call(timed_audio=False)
+        await c.step(100)
+        c.llm.enqueue(LlmScript(text="That IMEI did not pass the check. Could you look at it again?"))
+        c.port.emit(
+            {
+                "type": "field.candidate",
+                "payload": {
+                    "candidate": {
+                        "field": "serialNumber",
+                        "status": "invalid",
+                        "error": "That IMEI's last digit doesn't match the others. Please check each digit.",
+                    }
+                },
+            }
+        )
+        await c.step(3_000)
+        [event] = last_state(c.llm)["newChatEvents"]
+        assert event["field"] == "serialNumber" and event["result"] == "rejected"
+        assert "last digit" in event["reason"]
+        await c.engine.stop("hangup")
