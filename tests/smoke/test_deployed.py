@@ -159,7 +159,7 @@ class LoudnessStt:
                     if state["quiet"] >= 25:
                         state["speaking"] = False
                         state["loud"] = 0
-                        emit(SttTranscript("my screen flickers and goes black", True, True))
+                        emit(SttTranscript("my screen flickers and goes black since last Tuesday", True, True))
 
             async def close(self) -> None:
                 state["closed"] = True
@@ -169,7 +169,7 @@ class LoudnessStt:
 
 
 class ScriptedLlm(FakeLlm):
-    """Greets, asks for the serial number card on the first answer, acknowledges chat events, otherwise talks at length."""
+    """Greets, takes the first answer for the voice questions (so the system opens the serial number card), acknowledges chat events, otherwise talks at length."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -184,7 +184,10 @@ class ScriptedLlm(FakeLlm):
             (m for m in reversed(messages) if m.role == "system" and (m.content or "").startswith("STATE ")), None
         )
         events = json.loads((state.content or "")[6:]).get("newChatEvents", []) if state else []
-        spoke = any(m.role == "user" and not (m.content or "").startswith("STATE") for m in messages)
+        spoke = any(
+            m.role == "user" and not (m.content or "").startswith(("STATE", "(The call has just connected"))
+            for m in messages
+        )
         if events:
             self.enqueue(LlmScript(text="Thanks, I've got your serial number."))
         elif last is not None and last.role == "tool":
@@ -196,7 +199,31 @@ class ScriptedLlm(FakeLlm):
             )
         elif spoke and not self.asked:
             self.asked = True
-            self.enqueue(LlmScript(tool_calls=[{"name": "request_chat_input", "args": {"field": "serialNumber"}}]))
+            # The system opens the cards only after the five voice questions (flow.py): the customer's one answer is
+            # taken for all of them, so the serial number card opens at the end of this turn.
+            said = next((m.content or "" for m in reversed(messages) if m.role == "user"), "")
+            answers = {
+                "deviceType": "smartphone",
+                "deviceModel": "Samsung Galaxy S23",
+                "problemDescription": "the screen is broken",
+                "problemStartedAt": "last Tuesday",
+                "urgency": "high",
+            }
+            self.enqueue(
+                LlmScript(
+                    tool_calls=[
+                        {
+                            "name": "save_field",
+                            "args": {
+                                "field": f,
+                                "value": v,
+                                "spoken_evidence": "last Tuesday" if f == "problemStartedAt" else said,
+                            },
+                        }
+                        for f, v in answers.items()
+                    ]
+                )
+            )
         elif spoke:
             self.enqueue(
                 LlmScript(

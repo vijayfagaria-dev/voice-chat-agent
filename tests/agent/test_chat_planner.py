@@ -11,13 +11,13 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
-from app.agent.chat_planner import SAFETY_NET_MS, chat_mode, plan_chat
+from app.agent.chat_planner import chat_mode, plan_chat
 from app.agent.chat_templates import STALLED_MESSAGE
 from app.db.repos.calls import Call
 from app.db.repos.field_candidates import FieldCandidate
 from app.db.repos.input_requests import StoredInputRequest
 from app.db.repos.sessions import Session
-from app.domain.fields import CHAT_FIELDS, FIELDS, REQUIRED_RECORD_FIELDS
+from app.domain.fields import FIELDS, REQUIRED_RECORD_FIELDS
 from tests.domain.helpers import VALID_VALUES
 
 SID = "0b6f4c1e-3d2a-4e8b-9a71-5c2d8e9f1a3b"
@@ -342,12 +342,13 @@ class TestQueuedCards:
         events = plan(
             session=session(active_call_id="c1"), calls=[call(ended_at=None)], requests=requests, candidates=candidates
         ).events
-        # The cancelled card is the call's doing; the chain then moves on to the next chat field.
-        assert shape(events)[0] == ["input.cancelled", "req_serviceCentre_1"]
-        assert shape(events)[-1] == ["input.requested", "req_serialNumber_1"]
+        assert shape(events) == [["input.cancelled", "req_serviceCentre_1"]]
 
 
-class TestInCallSafetyNet:
+class TestDuringACall:
+    """The call engine owns the cards during a call (flow.py); the planner opens what was queued and sends nothing of its own.
+    Live 2026-11-12: the planner's own chain made the IMEI card appear while the agent was still asking about urgency."""
+
     def in_call(self, started_ago_ms: float, **over: Any):
         return plan(
             session=session(active_call_id="c1"),
@@ -355,46 +356,19 @@ class TestInCallSafetyNet:
             **over,
         )
 
-    def test_does_nothing_in_the_first_60_s_of_a_call_the_agent_decides_when_to_send_cards(self) -> None:
-        assert self.in_call(SAFETY_NET_MS - 1000).events == []
+    def test_sends_no_card_of_its_own_however_long_the_call_has_run(self) -> None:
+        assert self.in_call(1_000).events == []
+        assert self.in_call(600_000).events == []
 
-    def test_sends_the_first_chat_card_itself_after_60_s_if_the_agent_hasnt_sent_any(self) -> None:
-        assert shape(self.in_call(SAFETY_NET_MS).events) == [
-            ["chat.message", f"While we talk, you can fill this in here: {FIELDS['serialNumber'].card.label}"],
-            ["input.requested", "req_serialNumber_1"],
-        ]
-
-    def test_skips_chat_fields_already_valid(self) -> None:
-        candidates = [candidate("serialNumber", "chat", "valid")]
-        assert shape(self.in_call(SAFETY_NET_MS, candidates=candidates).events)[-1] == [
-            "input.requested",
-            "req_purchaseInvoice_1",
-        ]
-
-    # Live call of 2026-11-12: the agent said "type your email in the chat" while the email card only existed 20 s later,
-    # because every card after the first waited for a model turn.
-    def test_once_the_agent_has_sent_a_card_this_call_the_next_chat_card_opens_as_soon_as_the_last_is_answered(
-        self,
-    ) -> None:
+    def test_sends_none_after_a_card_was_answered_either(self) -> None:
         requests = [request("req_serviceCentre_1", "serviceCentre", "answered", created_at=at(-10))]
-        candidates = [
-            candidate("serialNumber", "chat", "valid"),
-            candidate("purchaseInvoice", "chat", "valid"),
-            candidate("serviceCentre", "chat", "valid"),
-        ]
-        events = self.in_call(10_000, requests=requests, candidates=candidates).events
-        assert shape(events)[-1] == ["input.requested", "req_email_1"]
+        candidates = [candidate("serialNumber", "chat", "valid"), candidate("serviceCentre", "chat", "valid")]
+        assert self.in_call(10_000, requests=requests, candidates=candidates).events == []
 
-    def test_the_chain_waits_while_a_card_is_open_and_stops_when_every_chat_field_is_done(self) -> None:
-        open_card = [request("req_serviceCentre_1", "serviceCentre", "open", created_at=at(-10))]
-        assert self.in_call(10_000, requests=open_card).events == []
-        assert self.in_call(10_000, requests=open_card, candidates=valid_fields(CHAT_FIELDS)).events == []
-        answered = [request("req_email_1", "email", "answered", created_at=at(-10))]
-        assert self.in_call(10_000, requests=answered, candidates=valid_fields(CHAT_FIELDS)).events == []
-
-    def test_never_opens_voice_fields_or_the_confirmation_during_a_call(self) -> None:
-        candidates = valid_fields(CHAT_FIELDS)
-        assert self.in_call(SAFETY_NET_MS * 5, candidates=candidates).events == []
+    def test_opens_a_card_the_engine_queued(self) -> None:
+        requests = [request("req_serialNumber_1", "serialNumber", "queued", created_at=at(-1))]
+        events = self.in_call(10_000, requests=requests).events
+        assert shape(events)[-1] == ["input.requested", "req_serialNumber_1"]
 
 
 class TestTemplates:

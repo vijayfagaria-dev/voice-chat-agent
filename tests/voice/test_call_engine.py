@@ -1114,3 +1114,62 @@ class TestTheBrowserGoesAway:
             await c.step(20)
         assert c.port.of("EndCall") == []
         assert c.engine.mic_quiet_ms < 100
+
+
+class TestTheSystemOpensTheCards:
+    """flow.py: the cards come after the voice questions, one at a time, in the turn that announces them."""
+
+    @staticmethod
+    def wire_cards(c: Call) -> None:
+        """A RequestInput leaves a card open in the session, as the real planner would."""
+
+        def request_input(cmd: Cmd) -> dict[str, Any]:
+            c.port.ctx.requests.append(SimpleNamespace(field=cmd["field"], status="open", attempts=0))
+            return {"status": "queued", "requestId": f"req_{cmd['field']}_1"}
+
+        c.port.replies["RequestInput"] = request_input
+
+    async def test_while_a_voice_question_is_open_no_card_is_opened_and_the_state_says_ask(self) -> None:
+        c = await call(timed_audio=False)
+        self.wire_cards(c)
+        await c.step(100)
+        c.llm.enqueue(LlmScript(text="When did it start?"))
+        c.stt.current.say("it is a Galaxy")
+        await c.step(2_000)
+        assert c.port.of("RequestInput") == []
+        assert last_state(c.llm)["nextStep"] == {"say": "ask", "field": "deviceType"}
+        await c.engine.stop("hangup")
+
+    async def test_once_the_voice_questions_are_done_the_next_card_opens_at_the_start_of_the_turn_that_announces_it(
+        self,
+    ) -> None:
+        c = await call(timed_audio=False)
+        self.wire_cards(c)
+        for field in ("deviceType", "deviceModel", "problemDescription", "problemStartedAt", "urgency"):
+            c.port.ctx.fields[field] = resolved("valid", "x", "call")
+        await c.step(100)
+        c.llm.enqueue(LlmScript(text="I have sent a box for your serial number."))
+        c.stt.current.say("it is critical")
+        await c.step(2_000)
+        assert [cmd["field"] for cmd in c.port.of("RequestInput")] == ["serialNumber"]
+        assert last_state(c.llm)["nextStep"] == {"say": "announceCard", "field": "serialNumber"}
+        # The next turn only waits for the card: no second card, no second announcement.
+        c.llm.enqueue(LlmScript(text="Take your time."))
+        c.stt.current.say("one moment")
+        await c.step(2_000)
+        assert [cmd["field"] for cmd in c.port.of("RequestInput")] == ["serialNumber"]
+        assert last_state(c.llm)["nextStep"] == {"say": "waitForCard", "field": "serialNumber"}
+        await c.engine.stop("hangup")
+
+    async def test_a_card_the_model_asks_for_too_early_or_twice_is_refused_or_ignored_quietly(self) -> None:
+        c = await call(timed_audio=False)
+        self.wire_cards(c)
+        await c.step(100)
+        c.llm.enqueue(
+            LlmScript(tool_calls=[{"name": "request_chat_input", "args": {"field": "email"}}]),
+            LlmScript(text="What kind of device is it?"),
+        )
+        c.stt.current.say("hello")
+        await c.step(2_500)
+        assert c.port.of("RequestInput") == []  # a voice question is still open: not yet
+        await c.engine.stop("hangup")

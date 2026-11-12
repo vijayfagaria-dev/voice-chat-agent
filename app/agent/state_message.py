@@ -18,6 +18,7 @@ from typing import Any, Literal
 
 from app.agent.chat_planner import field_state
 from app.agent.chat_templates import summary_value
+from app.agent.flow import next_step
 from app.db.repos.input_requests import StoredInputRequest
 from app.domain.conflicts import ResolvedField
 from app.domain.fields import FIELDS, RECORD_FIELD_IDS, REQUIRED_RECORD_FIELDS
@@ -47,6 +48,10 @@ class StateInput:
     new_chat_events: Sequence[ChatEventNote]
     #: For a returning call: the last thing the agent said on the previous call.
     last_agent_line: str | None = None
+    #: The call agent is led by the system's flow (flow.py): the state says the one thing to do this turn.
+    guide_flow: bool = False
+    #: The card the system opened at the start of this turn, which the agent announces.
+    just_opened: str | None = None
 
 
 _LEFT_ANGLE = chr(0x2039)
@@ -124,6 +129,10 @@ def build_state(state_input: StateInput) -> dict[str, Any]:
     result["readyToSubmit"] = (
         not missing and not stuck and "submitConfirmation" not in pending and claim_status == "collecting"
     )
+    if state_input.guide_flow and claim_status == "collecting":
+        result["nextStep"] = next_step(
+            fields=fields, requests=state_input.requests, just_opened=state_input.just_opened
+        )
     result["newChatEvents"] = [
         {"field": e.field, "result": e.result, **({"rejections": e.rejections} if e.rejections else {})}
         for e in state_input.new_chat_events

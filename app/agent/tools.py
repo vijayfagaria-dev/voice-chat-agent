@@ -53,7 +53,7 @@ TOOLS: tuple[ToolDefinition, ...] = (
     ),
     ToolDefinition(
         name="request_chat_input",
-        description="Send an input card to the customer's chat. Use it for fields that are awkward to say, and for submitConfirmation when everything required is collected.",
+        description="Send an input card to the customer's chat. On a call the system sends the cards itself, in order, so you do not use this there.",
         parameters={
             "type": "object",
             "properties": {"field": {"type": "string", "enum": list(CARD_FIELDS)}},

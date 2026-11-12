@@ -10,10 +10,8 @@ commit depends on memory: a crash between "the call ended" and "the next card" i
 
 Modes:
 - waiting: no call yet and the noCallStart deadline hasn't passed (PD10): the user is expected to tap Call.
-- inCall: the call agent decides when to send the first chat card (request_chat_input -> queued requests, P5); the planner
-  opens them one at a time, plus a safety net: if the agent hasn't asked for any chat card within 60 s of the call, the
-  planner sends the first one itself, so chat collection isn't gated on the model. Once a card has been asked for this
-  call, the planner opens the remaining chat fields in order as each is answered, so a card never waits for a model turn.
+- inCall: the call engine decides when each chat card goes out (flow.py: after the voice questions, one at a time, at the
+  start of the turn that announces it) by queueing it; the planner opens the queued card. It sends nothing of its own.
 - chat: no call active, and a call has happened or the deadline passed: the planner runs the whole flow (P4-T04).
 - closed: the session is finalized or closed: nothing to do (reopening is P7-T05).
 """
@@ -45,8 +43,6 @@ if TYPE_CHECKING:
 
 ChatMode = Literal["waiting", "inCall", "chat", "closed"]
 
-#: If the call agent hasn't sent any chat card this long into a call, the planner sends the first one (P4-T01).
-SAFETY_NET_MS = 60_000
 
 #: Fields the chat may ask for: every record field has a card (voice fields have chat fallbacks, PD5).
 _RECORD_FIELDS = frozenset([*CALL_FIELDS, *CHAT_FIELDS, *OPTIONAL_FIELDS])
@@ -216,28 +212,10 @@ def plan_chat(snapshot: Snapshot) -> ChatPlan:
         return ChatPlan(mode, events)
 
     if mode == "inCall":
-        call = next((c for c in snapshot.calls if c.id == snapshot.session.active_call_id), None)
-        if call is None:
-            call = next((c for c in reversed(snapshot.calls) if c.ended_at is None), None)
-        if call is None:
-            return ChatPlan(mode, events)
-        since = _ms(call.started_at)
-        asked_this_call = any(_ms(r.created_at) >= since and is_record_field(r.field) for r in snapshot.requests)
-        # The first card is the agent's to send (safety net after 60 s). Once it has started on the chat fields, the rest
-        # follow by themselves as each is answered: the agent's speech and the cards used to drift apart when every card
-        # waited for a model turn (live 2026-11-12: "type your email in the chat" was said 20 s before its card existed).
-        if not asked_this_call and _ms(snapshot.now) - since < SAFETY_NET_MS:
-            return ChatPlan(mode, events)
-        target = next((f for f in CHAT_FIELDS if state.needs(f)), None)
-        if target:
-            events.extend(
-                open_card_drafts(
-                    next_request_id(snapshot, target),
-                    target,
-                    FIELDS[target].card,
-                    lead_in(target, in_call=True, after_call=False),
-                )
-            )
+        # The call engine owns the cards during a call (flow.py): it opens each at the start of the turn that announces
+        # it, in order, after the voice questions. The planner only opens what it queued, above, and cancels what the
+        # call made obsolete. (It used to chain the cards itself; they then appeared while the agent was still asking
+        # other things, live 2026-11-12.)
         return ChatPlan(mode, events)
 
     # 4. Chat mode: the next field the flow needs, in order.

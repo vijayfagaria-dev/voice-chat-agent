@@ -32,6 +32,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.agent.chat_planner import is_record_field
+from app.agent.flow import next_step
 from app.agent.grounding import grounding_error
 from app.agent.prompt import system_message
 from app.agent.state_message import ChatEventNote, StateInput, state_message
@@ -201,6 +202,8 @@ class CallEngine:
         self._stt_bytes = 0
         self._last_audio_at = clock.now()
         self._end_detail: str | None = None
+        #: The card the system opened for the turn in progress (announced by the agent, then cleared).
+        self._just_opened: str | None = None
         self._mic_timer: Any = None
         self._ending: asyncio.Future[None] | None = None
         #: Set first thing when the call ends, before any provider is closed (their close events must not look unexpected).
@@ -578,6 +581,9 @@ class CallEngine:
         speech.end()
         # Until the user has heard it all (or interrupted it): barge-in stays possible, and silence counts from here.
         spoken = await self._played_out(turn)
+        # The card was announced if the agent got to say it; cut off, the next turn announces it again.
+        if not out.aborted and not spoken.interrupted:
+            self._just_opened = None
         self._after_agent_turn(turn, spoken, out.messages)
         # Chat events this turn never got to mention go back for the next one (P5 review #8).
         if not spoken.heard and (out.aborted or spoken.interrupted):
@@ -708,8 +714,27 @@ class CallEngine:
         turn.running = _eager(run())
         await turn.running
 
+    async def _advance_cards(self, ctx: Any) -> Any:
+        """Opens the next chat card when the flow says it is time (flow.py), at the start of the turn that announces it:
+        the card and the agent's words about it arrive together, and no card shows up while a voice question is open."""
+        if self._stopping or ctx.session.status != "active":
+            return ctx
+        field = next_step(fields=ctx.fields, requests=ctx.requests, just_opened=self._just_opened).get("open")
+        if field is None:
+            return ctx
+        try:
+            reply = await self._port.dispatch({"type": "RequestInput", "field": field})
+        except Exception as err:
+            self._log.error("could not open the next card", field=field, message=str(err))
+            return ctx
+        if _reply_get(reply, "status") not in ("queued", "alreadyPending"):
+            return ctx
+        self._just_opened = field
+        self._last_card_at = self._clock.now()
+        return await self._port.context(self._call_id)
+
     async def _state(self, notes: list[ChatEventNote]) -> LlmMessage:
-        ctx = await self._port.context(self._call_id)
+        ctx = await self._advance_cards(await self._port.context(self._call_id))
         with_counts = [replace(note, rejections=self._rejections.get(note.field, 0)) for note in notes]
         return state_message(
             StateInput(
@@ -721,6 +746,8 @@ class CallEngine:
                 is_returning_call=self._returning,
                 last_agent_line=ctx.last_agent_line_before,
                 new_chat_events=with_counts,
+                guide_flow=True,
+                just_opened=self._just_opened,
             )
         )
 
@@ -776,6 +803,17 @@ class CallEngine:
             reason = _reply_get(reply, "reason") if status == "refused" else "unknown"
             return ToolOutcome(result={"status": "refused", "reason": reason}, ok=False)
         if call.name == "request_chat_input":
+            # The system opens the cards, in order (flow.py). The model asking for one is either redundant or too early.
+            ctx = await port.context(self._call_id)
+            step = next_step(fields=ctx.fields, requests=ctx.requests, just_opened=self._just_opened)
+            if any(r.field == args["field"] and r.status in ("open", "queued") for r in ctx.requests):
+                return ToolOutcome(result={"status": "alreadyOpen"}, ok=True)
+            if step.get("say") == "ask":
+                return ToolOutcome(
+                    result={"status": "notYet", "note": "ask the next question first; the system opens the cards"},
+                    ok=False,
+                    quiet=True,
+                )
             reply = await port.dispatch({"type": "RequestInput", "field": args["field"]})
             status = _reply_get(reply, "status")
             if status in ("queued", "alreadyPending"):
