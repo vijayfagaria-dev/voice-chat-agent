@@ -44,6 +44,7 @@ FILLER_LINE = "Sorry, give me a moment. Could you say that again?"
 ONE_MOMENT = "One moment."
 
 _TRAILING_SPACE = re.compile(r"\s$")
+_ENDS_SENTENCE = re.compile(r"[.!?…][\"'”’)]*\s*$")
 _LEADING_SPACE = re.compile(r"^\s")
 
 
@@ -260,7 +261,10 @@ async def run_turn(deps: TurnDeps, input: TurnInput, sink: TurnSink) -> TurnOutp
             if text or calls:
                 out.messages.append(LlmMessage(role="assistant", content=text or None))
             break
-        if broke and not calls and not retried_break:
+        # A reply that already ends like a sentence is finished: the provider rejected something after it (live 2026-11-12: a
+        # malformed tool call after the question failed the whole stream), and a retry only asks the question again.
+        # Only a reply cut off mid-sentence, or nothing at all, gets the one retry.
+        if broke and not calls and not retried_break and not _ENDS_SENTENCE.search(text):
             retried_break = True
             out.failed = False
             if text.strip():

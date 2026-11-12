@@ -348,3 +348,19 @@ class TestBrokenStream:
         out = await t.go(fixed_state=True)
         assert out.spoken == "Which device is it?"
         assert len(t.llm.requests) == 2
+
+    # Live call of 2026-11-12: the model asked the question and then sent a tool call the provider rejected; the stream
+    # failed after the question was spoken, and the retry asked it a second time.
+    async def test_a_stream_that_breaks_after_a_finished_sentence_is_not_retried_so_the_question_is_not_asked_twice(
+        self,
+    ) -> None:
+        t = Setup()
+        t.llm.enqueue(
+            LlmScript(text="What is the brand and model of your phone?", piece_chars=8, break_after=6),
+            LlmScript(text="What is the brand and model of your phone?"),
+        )
+        out = await t.go(fixed_state=True)
+        assert out.spoken == "What is the brand and model of your phone?"
+        assert len(t.llm.requests) == 1
+        assert out.failed is False
+        assert out.messages[-1].content == "What is the brand and model of your phone?"
