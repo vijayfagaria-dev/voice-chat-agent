@@ -1107,6 +1107,18 @@ class TestTheBrowserGoesAway:
         ]
         assert c.closes == [(CloseCode.NORMAL, "connection lost")]
 
+    async def test_while_a_card_is_open_a_quiet_mic_is_given_much_longer_the_customer_is_in_the_chat(self) -> None:
+        # Live 2026-11-12: dropped as "no microphone audio for 12 s" while the customer chose the invoice file.
+        c = await call(timed_audio=False, mic_stale_ms=10_000, timings=CallTimings(silence_ms=1_000_000))
+        for _ in range(50):
+            c.engine.push_audio(bytes(640))
+            await c.step(20)
+        c.port.emit({"type": "input.requested", "channel": "chat", "payload": {"request": {"id": "r", "field": "x"}}})
+        await c.step(100_000)
+        assert c.port.of("EndCall") == []
+        await c.step(40_000)
+        assert [cmd["reason"] for cmd in c.port.of("EndCall")] == ["network"]
+
     async def test_a_call_that_keeps_getting_mic_frames_is_left_alone(self) -> None:
         c = await call(timed_audio=False, mic_stale_ms=10_000, timings=CallTimings(silence_ms=1_000_000))
         for _ in range(1_000):  # 20 s

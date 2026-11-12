@@ -96,8 +96,13 @@ class CallTimings:
     safety_net_ms: float = 61_000
     #: The browser sends a mic frame every 20 ms for as long as it is on the call. None for this long means it is gone, even if
     #: the socket looks open (a proxy can drop the browser's side and keep ours; its pings answer for the browser, live
-    #: 2026-11-12): the call ends instead of sitting on the session until the silence timer.
-    mic_stale_ms: float = 10_000
+    #: 2026-11-12): the call ends instead of sitting on the session. It is only housekeeping: a new call for the session
+    #: replaces a quiet one at once (ws/call.py), so this can be patient.
+    mic_stale_ms: float = 30_000
+    #: ...and longer while a chat card is open: the customer is in the chat, and choosing a file in the browser's file dialog
+    #: stops the page's audio capture for a while (live 2026-11-12: the call was dropped as "no microphone audio for 12 s"
+    #: during the invoice upload).
+    mic_stale_with_card_ms: float = 120_000
 
 
 DEFAULT_CALL_TIMINGS = CallTimings()
@@ -354,7 +359,8 @@ class CallEngine:
         self._mic_timer = None
         if self._stopping:
             return
-        if self.mic_quiet_ms >= self._t.mic_stale_ms:
+        card_recent = self._clock.now() - self._last_card_at < self._t.open_card_suspend_ms
+        if self.mic_quiet_ms >= (self._t.mic_stale_with_card_ms if card_recent else self._t.mic_stale_ms):
             self._log.warning("no mic audio; ending the call", quiet_ms=round(self.mic_quiet_ms))
             self._end_detail = f"no microphone audio for {round(self.mic_quiet_ms / 1000)} s"
             self._spawn(self._end("network", (CloseCode.NORMAL, "connection lost")))

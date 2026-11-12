@@ -15,6 +15,23 @@ const MIC_ERRORS: Record<string, string> = {
 
 let stream: MediaStream | null = null;
 let worklet: AudioWorkletNode | null = null;
+let unwatch: (() => void) | null = null;
+
+// A browser may suspend the page's audio while a native dialog (the file picker) or another window has the focus. Capture
+// then stops until the context runs again; this brings it back as soon as the page does.
+function keepRunning(context: AudioContext): () => void {
+  const resume = () => {
+    if (context.state === "suspended" || (context.state as string) === "interrupted") void context.resume().catch(() => {});
+  };
+  context.addEventListener("statechange", resume);
+  document.addEventListener("visibilitychange", resume);
+  window.addEventListener("focus", resume);
+  return () => {
+    context.removeEventListener("statechange", resume);
+    document.removeEventListener("visibilitychange", resume);
+    window.removeEventListener("focus", resume);
+  };
+}
 
 // Safari/iOS: call synchronously from a click.
 export async function startMic(onFrame: FrameHandler): Promise<void> {
@@ -32,6 +49,7 @@ export async function startMic(onFrame: FrameHandler): Promise<void> {
       return;
     }
     stream = media;
+    unwatch = keepRunning(context);
     await context.audioWorklet.addModule(workletUrl);
     if (currentAudioContext() !== context) return;
     const options: CaptureOptions = { processorOptions: { targetRate: MIC_SAMPLE_RATE, frameMs: MIC_FRAME_MS } };
@@ -49,6 +67,8 @@ export async function startMic(onFrame: FrameHandler): Promise<void> {
 
 export function stopMic(): void {
   stopPlayback();
+  unwatch?.();
+  unwatch = null;
   if (worklet) worklet.port.onmessage = null;
   stream?.getTracks().forEach((track) => track.stop());
   closeAudioContext();
