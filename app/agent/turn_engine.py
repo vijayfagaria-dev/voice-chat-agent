@@ -44,7 +44,7 @@ FILLER_LINE = "Sorry, give me a moment. Could you say that again?"
 ONE_MOMENT = "One moment."
 
 _TRAILING_SPACE = re.compile(r"\s$")
-_ENDS_SENTENCE = re.compile(r"[.!?…][\"'”’)]*\s*$")
+_ENDS_SENTENCE = re.compile(r"[.!?\u2026][\"'\u201d\u2019)]*\s*$")
 _LEADING_SPACE = re.compile(r"^\s")
 
 

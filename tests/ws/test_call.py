@@ -116,6 +116,24 @@ class TestStartingACall:
         await first.close(1000)
         await wait_for(lambda: _len_is(ended(db, id_), 1), "call.ended")
 
+    # Live call of 2026-11-12: the browser's side of the socket was gone but ours stayed open, so the session stayed "in
+    # a call" and every new call got 4409 until the silence timer ended the old one.
+    async def test_a_call_whose_browser_stopped_sending_audio_is_replaced_by_a_new_one(self, rig, monkeypatch):
+        db = rig.db
+        monkeypatch.setattr("app.ws.call.STALE_CALL_MS", 0)
+        id_ = await seed_session(db.pool)
+        first = await open_call(id_, rig.server)
+        await wait_for(lambda: call_started(db, id_), "the first call")
+        old_id = await active_call_id(db, id_)
+        second = await open_call(id_, rig.server)
+        await wait_for(lambda: _len_is(ended(db, id_), 1), "the old call to end")
+        assert await ended(db, id_) == ["network"]
+        await wait_for(lambda: _new_call_running(db, id_, old_id), "the new call")
+        assert second.is_open
+        await first.closed
+        await second.close(1000)
+        await wait_for(lambda: _len_is(ended(db, id_), 2), "the new call to end")
+
     # Live report (2026-11-11): pressing Call while the same claim's call was still running said "Voice is busy right
     # now", because the capacity check (cap 1) ran before the per-session check.
     async def test_with_a_cap_of_1_a_second_call_from_the_same_session_is_told_a_call_is_already_active_not_busy(
@@ -457,3 +475,8 @@ async def _at_least(awaitable: Any, n: int) -> bool:
 
 
 _ = RawSocket  # re-exported client type, kept for readers of the network-loss test
+
+
+async def _new_call_running(db: Any, id_: str, old_id: str | None) -> bool:
+    now = await active_call_id(db, id_)
+    return now is not None and now != old_id

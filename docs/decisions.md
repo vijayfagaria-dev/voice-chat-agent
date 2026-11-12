@@ -9,7 +9,8 @@ Where the brief left room, these are the choices made and the reasoning behind t
 | **Identifiers must be typed.** A serial number or email heard on the call is saved as `unverified` and the agent asks for it in the chat | Speech recognition is unreliable for alphanumerics |
 | **One page, one session.** The call and chat share the starter's single page; the same session link works in a second tab | Matches the brief's UI and makes reconnects trivial |
 | **A header Stop button** opens a confirmation card; only Yes opts out (the chat has no free-text field) | An accidental tap cannot end a claim |
-| **Silence:** a re-prompt at 8 s; after two, the call ends and the chat continues | A quiet line should not hang the session, and the chat can finish the job |
+| **Silence:** a re-prompt at 8 s; after two, the call ends and the chat continues. Not counted while a chat card is open (up to 2 min) | A quiet line should not hang the session, and the chat can finish the job |
+| **Dead browser:** no mic audio for 10 s ends the call; a new call replaces one that has been quiet for 3 s | A proxy can drop the browser's side and keep ours open (its pings answer for the browser), so the session would stay locked |
 | **Safety first:** a swollen battery, smoke, burning smell or liquid while charging makes the agent advise stopping use and flags `needsReview` | A hazard matters more than a complete form |
 | **Consent line:** the call opens with a note that it is processed as text; raw audio is never stored | Privacy by default |
 | **Service centres are a fictional list** ("… Demo Repair Centre") | No real business is impersonated |

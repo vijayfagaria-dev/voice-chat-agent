@@ -138,6 +138,8 @@ class CallState:
     #: active" before the capacity check: with a cap of 1 the caller's own live call would otherwise make the refusal
     #: read "voice is busy" (live report, 2026-11-11), which is untrue and hides that the call is still running.
     sessions_in_call: set[str] = field(default_factory=set)
+    #: The running engine of each session in `sessions_in_call` (absent while that call is still being set up).
+    engines_by_session: dict[str, CallEngine] = field(default_factory=dict)
 
 
 def _new_call_id() -> str:
@@ -147,6 +149,32 @@ def _new_call_id() -> str:
 def _call_wire(message: Any) -> str:
     wire = message if isinstance(message, dict) else to_wire(message)
     return json.dumps(wire, ensure_ascii=False, separators=(",", ":"))
+
+
+#: A call that has had no mic audio for this long is not a live call: a new one for the session replaces it. A real second
+#: tab (audio still flowing) is still refused (D11).
+STALE_CALL_MS = 3_000
+#: How long the replaced call gets to write its EndCall before the new one is refused anyway.
+REPLACE_WAIT_S = 3.0
+
+
+async def _replace_quiet_call(state: CallState, session_id: str, log: Any) -> bool:
+    """Ends the session's running call when the browser behind it has gone quiet. True once the session is free."""
+    old = state.engines_by_session.get(session_id)
+    if old is None:
+        return False  # still being set up
+    if not old.ended:
+        if old.mic_quiet_ms < STALE_CALL_MS:
+            return False
+        log.warning(
+            "replacing a call that stopped sending audio", call_id=old.call_id, quiet_ms=round(old.mic_quiet_ms)
+        )
+        old.drop("network", "replaced")
+    try:
+        await asyncio.wait_for(asyncio.shield(old.when_ended), REPLACE_WAIT_S)
+    except TimeoutError:
+        return False
+    return session_id not in state.sessions_in_call
 
 
 async def call_socket(socket: ManagedSocket, deps: CallSocketDeps, state: CallState) -> None:
@@ -172,9 +200,11 @@ async def call_socket(socket: ManagedSocket, deps: CallSocketDeps, state: CallSt
         return
     if not socket.is_open:
         return
-    if session.id in state.sessions_in_call:
+    if session.id in state.sessions_in_call and not await _replace_quiet_call(state, session.id, log):
         log.warning("call refused: this session already has a call")
         close_with_notice(socket, CloseCode.CALL_ALREADY_ACTIVE, "call already active")
+        return
+    if not socket.is_open or session.id in state.sessions_in_call:
         return
     if state.active.size + state.starting >= voice.max_concurrent_calls:
         log.warning("call refused: capacity", active=state.active.size, max=voice.max_concurrent_calls)
@@ -264,9 +294,13 @@ async def call_socket(socket: ManagedSocket, deps: CallSocketDeps, state: CallSt
     running = engine
     state.active.engines.add(running)
 
+    state.engines_by_session[session.id] = running
+
     def call_ended(_future: Any) -> None:
         state.active.engines.discard(running)
-        state.sessions_in_call.discard(session.id)
+        if state.engines_by_session.get(session.id) is running:
+            del state.engines_by_session[session.id]
+            state.sessions_in_call.discard(session.id)
 
     running.when_ended.add_done_callback(call_ended)
 

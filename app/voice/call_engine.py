@@ -87,9 +87,16 @@ class CallTimings:
     proactive_idle_ms: float = 1_200
     #: Silence isn't counted for this long after a chat card opened (the user is busy typing, P5-T10).
     card_suspend_ms: float = 30_000
+    #: ...and for this long while a card is still open (live 2026-11-12: the call was ended for silence while the customer
+    #: was uploading the invoice and typing the email in the chat). An abandoned card doesn't hold the call forever.
+    open_card_suspend_ms: float = 120_000
     max_call_ms: float = 10 * 60_000
     #: The planner's 60 s safety net runs at this point of the call (P4-T01).
     safety_net_ms: float = 61_000
+    #: The browser sends a mic frame every 20 ms for as long as it is on the call. None for this long means it is gone, even if
+    #: the socket looks open (a proxy can drop the browser's side and keep ours; its pings answer for the browser, live
+    #: 2026-11-12): the call ends instead of sitting on the session until the silence timer.
+    mic_stale_ms: float = 10_000
 
 
 DEFAULT_CALL_TIMINGS = CallTimings()
@@ -188,6 +195,8 @@ class CallEngine:
         self._timers: list[Any] = []
         self._unsubscribe: Callable[[], None] | None = None
         self._stt_bytes = 0
+        self._last_audio_at = clock.now()
+        self._mic_timer: Any = None
         self._ending: asyncio.Future[None] | None = None
         #: Set first thing when the call ends, before any provider is closed (their close events must not look unexpected).
         self._stopping = False
@@ -301,6 +310,7 @@ class CallEngine:
         self._stt = stt
         self._tts = tts
         self._unsubscribe = self._port.subscribe(self._on_session_update)
+        self._arm_mic_check()
         self._timers.append(self._clock.set_timeout(self._max_duration_reached, self._t.max_call_ms))
         self._timers.append(self._clock.set_timeout(lambda: self._spawn(self._reconcile()), self._t.safety_net_ms))
         self._spawn(
@@ -321,7 +331,30 @@ class CallEngine:
         if self._stopping or self._stt is None:
             return
         self._stt_bytes += len(pcm)
+        self._last_audio_at = self._clock.now()
         self._stt.push(pcm)
+
+    @property
+    def mic_quiet_ms(self) -> float:
+        """How long since the last mic frame (since the start of the call if none came yet)."""
+        return self._clock.now() - self._last_audio_at
+
+    def _arm_mic_check(self) -> None:
+        self._mic_timer = self._clock.set_timeout(self._check_mic, max(self._t.mic_stale_ms / 4, 1))
+
+    def _check_mic(self) -> None:
+        self._mic_timer = None
+        if self._stopping:
+            return
+        if self.mic_quiet_ms >= self._t.mic_stale_ms:
+            self._log.warning("no mic audio; ending the call", quiet_ms=round(self.mic_quiet_ms))
+            self._spawn(self._end("network", (CloseCode.NORMAL, "connection lost")))
+            return
+        self._arm_mic_check()
+
+    def drop(self, reason: CallEndReason, why: str) -> asyncio.Future[None]:
+        """Ends the call from our side and closes its socket (a newer call for the same session replaces it)."""
+        return self._end(reason, (CloseCode.NORMAL, why))
 
     def stop(self, reason: CallEndReason) -> asyncio.Future[None]:
         """The socket closed (the user hung up, the network dropped, the server is restarting)."""
@@ -829,11 +862,22 @@ class CallEngine:
             self._clock.clear_timeout(self._silence_timer)
         self._silence_timer = None
 
+    async def _card_is_open(self) -> bool:
+        try:
+            context = await self._port.context(self._call_id)
+        except Exception as err:
+            self._log.warning("could not read the open cards", message=str(err))
+            return False
+        return any(request.status == "open" for request in context.requests)
+
     async def _on_silence(self) -> None:
         if self._stopping or self._turn is not None or self._user_turns.speaking:
             return
         if self._clock.now() - self._last_card_at < self._t.card_suspend_ms:
             self._arm_silence()  # they're probably looking for the serial number or typing
+            return
+        if self._clock.now() - self._last_card_at < self._t.open_card_suspend_ms and await self._card_is_open():
+            self._arm_silence()  # a card is still waiting for them
             return
         self._reprompts += 1
         if self._reprompts > self._t.silence_reprompts:
@@ -881,6 +925,9 @@ class CallEngine:
         self._clear_proactive()
         if self._barge_timer is not None:
             self._clock.clear_timeout(self._barge_timer)
+        if self._mic_timer is not None:
+            self._clock.clear_timeout(self._mic_timer)
+            self._mic_timer = None
         for timer in self._timers:
             self._clock.clear_timeout(timer)
         if self._unsubscribe is not None:

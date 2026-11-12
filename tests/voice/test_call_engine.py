@@ -6,7 +6,9 @@ Real time never passes, so timings (barge-in reaction, silence at 8/16/24 s, the
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -151,6 +153,8 @@ async def call(
     returning: bool = False,
     timings: CallTimings | None = None,
     timed_audio: bool = True,
+    #: These tests send no mic frames, so the "browser is gone" check is off unless a test asks for it.
+    mic_stale_ms: float = math.inf,
 ) -> Call:
     clock = ManualClock()
     stt = FakeStt()
@@ -177,7 +181,7 @@ async def call(
         send=sent.append,
         close=lambda code, reason: closes.append((code, reason)),
         returning=returning,
-        timings=timings,
+        timings=dataclasses.replace(timings or CallTimings(), mic_stale_ms=mic_stale_ms),
     )
     c = Call(clock, stt, tts, llm, port, sent, closes, engine)
     await flush()
@@ -594,6 +598,25 @@ class TestSilence:
         assert c.port.of("EndCall") == [{"type": "EndCall", "call_id": "c1", "reason": "silence"}]
         assert c.closes == [(CloseCode.NORMAL, "silence")]
 
+    # Live call of 2026-11-12: ended for silence 45 s after the last card opened, while the customer was still on it.
+    async def test_isnt_counted_while_a_chat_card_is_still_open_for_up_to_2_minutes(self) -> None:
+        c = await call(timed_audio=False)
+        await c.step(100)
+        c.port.ctx.requests = [SimpleNamespace(status="open")]
+        c.port.emit({"type": "input.requested", "payload": {}})
+        await c.step(100_000, 500)
+        assert REPROMPTS[0] not in c.tts.current.spoken()
+        assert c.port.of("EndCall") == []
+        await c.step(40_000, 500)  # past the 2 minutes: an abandoned card doesn't hold the call forever
+        assert REPROMPTS[0] in c.tts.current.spoken()
+
+    async def test_is_counted_once_the_card_is_answered(self) -> None:
+        c = await call(timed_audio=False)
+        await c.step(100)
+        c.port.emit({"type": "input.requested", "payload": {}})
+        await c.step(45_000, 500)
+        assert REPROMPTS[0] in c.tts.current.spoken()
+
     async def test_isnt_counted_for_30_s_after_a_chat_card_opened_theyre_busy_typing(self) -> None:
         c = await call(timed_audio=False)
         await c.step(100)
@@ -988,3 +1011,26 @@ class TestLiveCallFixes:
         await c.step(800)
         assert c.port.of("SaveSpokenField") == []
         await c.engine.stop("hangup")
+
+
+class TestTheBrowserGoesAway:
+    """Live call of 2026-11-12: the browser's side of the socket was dropped by the proxy, ours stayed open (its pings
+    answered for the browser). The call kept the session for 45 s, until the silence timer, and a new call was refused."""
+
+    async def test_a_call_that_stops_getting_mic_frames_ends_as_a_network_drop(self) -> None:
+        c = await call(timed_audio=False, mic_stale_ms=10_000, timings=CallTimings(silence_ms=1_000_000))
+        for _ in range(100):
+            c.engine.push_audio(bytes(640))
+            await c.step(20)
+        assert c.port.of("EndCall") == []
+        await c.step(11_000)
+        assert c.port.of("EndCall") == [{"type": "EndCall", "call_id": "c1", "reason": "network"}]
+        assert c.closes == [(CloseCode.NORMAL, "connection lost")]
+
+    async def test_a_call_that_keeps_getting_mic_frames_is_left_alone(self) -> None:
+        c = await call(timed_audio=False, mic_stale_ms=10_000, timings=CallTimings(silence_ms=1_000_000))
+        for _ in range(1_000):  # 20 s
+            c.engine.push_audio(bytes(640))
+            await c.step(20)
+        assert c.port.of("EndCall") == []
+        assert c.engine.mic_quiet_ms < 100
