@@ -272,18 +272,28 @@ class TestNoDoubleAcknowledgement:
         t = Setup()
         t.llm.enqueue(
             LlmScript(tool_calls=[save("deviceType", "smartphone")]),
-            LlmScript(text="Got itchy fingers? Which model is it?", piece_chars=4),
+            LlmScript(text="Got itchy fingers, which model is it?", piece_chars=4),
         )
         out = await t.go()
-        assert out.spoken == "Got it. Got itchy fingers? Which model is it?"
+        assert out.spoken == "Got it. Got itchy fingers, which model is it?"
 
-    async def test_nothing_the_model_says_is_cut_a_reply_with_a_question_and_more_after_it_is_spoken_in_full(
-        self,
-    ) -> None:
+    async def test_a_turn_is_one_question_long_whatever_the_model_says_after_it_is_not_spoken(self) -> None:
         t = Setup()
-        t.llm.enqueue(LlmScript(text="What seems to be wrong with it? Take your time, I'm listening.", piece_chars=7))
+        t.llm.enqueue(
+            LlmScript(
+                text="I'm sorry to hear that. When did it start? When did the problem start? How urgent is it?",
+                piece_chars=7,
+            )
+        )
         out = await t.go()
-        assert out.spoken == "What seems to be wrong with it? Take your time, I'm listening."
+        assert out.spoken == "I'm sorry to hear that. When did it start?"
+        assert out.messages[-1].content == "I'm sorry to hear that. When did it start?"
+
+    async def test_the_question_mark_can_arrive_in_the_middle_of_a_piece(self) -> None:
+        t = Setup()
+        t.llm.enqueue(LlmScript(text="What is wrong with it? Take your time.", piece_chars=100))
+        out = await t.go()
+        assert out.spoken == "What is wrong with it?"
 
     async def test_after_the_model_asked_something_a_failed_tool_call_does_not_start_a_follow_up_that_asks_again(
         self,

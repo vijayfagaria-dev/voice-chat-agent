@@ -424,7 +424,9 @@ class TestBargeIn:
         await c.engine.stop("hangup")
 
     async def test_echo_or_a_cough_doesnt_interrupt_voice_activity_alone_or_one_short_word(self) -> None:
-        c = await call(greeting=LlmScript(text=f"{LONG} {LONG}"))  # long enough to still be speaking throughout
+        c = await call(
+            greeting=LlmScript(text=f"{LONG} {LONG}".replace("?", "."))
+        )  # long enough (no question mark: a turn stops at its first) to still be speaking throughout
         await c.step(600)
         c.stt.current.emit(SttSpeechStarted())
         await c.step(1_000)

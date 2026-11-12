@@ -146,8 +146,9 @@ async def run_turn(deps: TurnDeps, input: TurnInput, sink: TurnSink) -> TurnOutp
     just_said = ""
     # A stream that broke mid-way gets one more round, told where it was cut off (a dead line is worse than a retry).
     retried_break = False
-    # The model has asked the customer something this turn: no follow-up round runs to ask again (live: the same question
-    # was asked three times, because failed tool calls after it started more rounds). Nothing is cut from what it says.
+    # The model has asked the customer something this turn. The turn is one question long: the speech stops at its question
+    # mark and no follow-up round runs to ask again (live 2026-11-12: three questions and a repeat in one reply, from one
+    # stream and from failed tool calls that started more rounds). The prompt says the same, but only this is certain.
     asked = False
     hint: LlmMessage | None = None
 
@@ -195,9 +196,10 @@ async def run_turn(deps: TurnDeps, input: TurnInput, sink: TurnSink) -> TurnOutp
 
         def speak(delta: str) -> None:
             nonlocal text, asked
-            if not delta or stale():
-                return
+            if not delta or stale() or asked:
+                return  # one question per turn: whatever follows the first one is never spoken
             if "?" in delta:
+                delta = delta[: delta.index("?") + 1]
                 asked = True
             # Only the round's first piece is separated from earlier speech; later pieces are mid-word tokens.
             if text == "":
