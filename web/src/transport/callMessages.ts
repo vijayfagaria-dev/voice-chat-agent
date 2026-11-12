@@ -1,0 +1,39 @@
+import { latencyProbe } from "../audio/latencyProbe";
+import * as playback from "../audio/playback";
+import { CallServerMessageType, type CallServerMessage, Role } from "@voice-chat-agent/shared/protocol";
+import type { Ui } from "../state/ui";
+import { parseMessage } from "./socket";
+
+export function handleCallMessage(ui: Ui, data: unknown): void {
+  const msg = parseMessage<CallServerMessage>(data);
+  switch (msg?.type) {
+    case CallServerMessageType.AUDIO:
+      {
+        const startsInMs = playback.playPcm16(base64ToBytes(msg.data), msg.sampleRate && msg.sampleRate > 0 ? msg.sampleRate : undefined);
+        if (startsInMs !== null) latencyProbe.onAgentAudio(performance.now() + startsInMs);
+      }
+      break;
+    case CallServerMessageType.STOP_PLAYBACK:
+      playback.stopPlayback();
+      break;
+    case CallServerMessageType.TRANSCRIPT:
+      if (msg.role === Role.AGENT && msg.id) latencyProbe.onAgentLine(msg.id);
+      ui.addTranscript(msg);
+      break;
+    case CallServerMessageType.CLOSING:
+      break; // read by useCall before this, to learn why the socket closes
+    case undefined:
+      break;
+    default:
+      // Unknown types are ignored at runtime; this makes the compiler flag a known type left unhandled.
+      msg satisfies never;
+  }
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  try {
+    return Uint8Array.from(atob(base64 || ""), (char) => char.charCodeAt(0));
+  } catch {
+    return new Uint8Array(0);
+  }
+}

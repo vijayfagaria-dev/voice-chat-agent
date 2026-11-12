@@ -1,0 +1,23 @@
+{
+  "name": "voice-chat-agent",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "web"
+  ],
+  "engines": {
+    "node": ">=22.18.0 <23"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "typecheck": "npm run build -w shared && npm run typecheck --workspaces",
+    "test": "vitest run",
+    "lint": "biome lint web shared"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.6",
+    "vite": "8.3.5",
+    "vitest": "5.1.0"
+  }
+}
