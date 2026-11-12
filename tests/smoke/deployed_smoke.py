@@ -623,14 +623,21 @@ async def _run(run: _Run, speech: bytes) -> RunResult:
         await asyncio.sleep(2)
         seen = len(chat.messages)
         hung_up_at = now_ms()
+        # The planner opens the next card as soon as one is answered during the call, so a card may already be waiting.
+        card_already_open = bool(open_cards(chat))
         await mic.stop()
         await call.close(1000)
-        nxt = await wait_until(
-            "a chat message after the hang-up",
-            10_000,
-            lambda: next((m for m in chat.messages[seen:] if m.msg.get("type") in ("message", "inputRequest")), None),
-        )
-        ms = round(nxt.at - hung_up_at)
+        if card_already_open:
+            ms = 0
+        else:
+            nxt = await wait_until(
+                "a chat message after the hang-up",
+                10_000,
+                lambda: next(
+                    (m for m in chat.messages[seen:] if m.msg.get("type") in ("message", "inputRequest")), None
+                ),
+            )
+            ms = round(nxt.at - hung_up_at)
         summary["handoffAfterHangupMs"] = ms
         await wait_until("a card to be open", 10_000, lambda: open_cards(chat)[:1])
         if ms > limits.handoff_after_hangup_ms:

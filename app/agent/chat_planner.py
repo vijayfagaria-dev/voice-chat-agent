@@ -10,9 +10,10 @@ commit depends on memory: a crash between "the call ended" and "the next card" i
 
 Modes:
 - waiting: no call yet and the noCallStart deadline hasn't passed (PD10): the user is expected to tap Call.
-- inCall: the call agent decides when to send chat cards (request_chat_input -> queued requests, P5); the planner opens
-  them one at a time, plus a safety net: if the agent hasn't asked for any chat card within 60 s of the call, the planner
-  sends the first one itself, so chat collection isn't gated on the model.
+- inCall: the call agent decides when to send the first chat card (request_chat_input -> queued requests, P5); the planner
+  opens them one at a time, plus a safety net: if the agent hasn't asked for any chat card within 60 s of the call, the
+  planner sends the first one itself, so chat collection isn't gated on the model. Once a card has been asked for this
+  call, the planner opens the remaining chat fields in order as each is answered, so a card never waits for a model turn.
 - chat: no call active, and a call has happened or the deadline passed: the planner runs the whole flow (P4-T04).
 - closed: the session is finalized or closed: nothing to do (reopening is P7-T05).
 """
@@ -218,11 +219,16 @@ def plan_chat(snapshot: Snapshot) -> ChatPlan:
         call = next((c for c in snapshot.calls if c.id == snapshot.session.active_call_id), None)
         if call is None:
             call = next((c for c in reversed(snapshot.calls) if c.ended_at is None), None)
-        if call is None or _ms(snapshot.now) - _ms(call.started_at) < SAFETY_NET_MS:
+        if call is None:
             return ChatPlan(mode, events)
         since = _ms(call.started_at)
         asked_this_call = any(_ms(r.created_at) >= since and is_record_field(r.field) for r in snapshot.requests)
-        target = None if asked_this_call else next((f for f in CHAT_FIELDS if state.needs(f)), None)
+        # The first card is the agent's to send (safety net after 60 s). Once it has started on the chat fields, the rest
+        # follow by themselves as each is answered: the agent's speech and the cards used to drift apart when every card
+        # waited for a model turn (live 2026-11-12: "type your email in the chat" was said 20 s before its card existed).
+        if not asked_this_call and _ms(snapshot.now) - since < SAFETY_NET_MS:
+            return ChatPlan(mode, events)
+        target = next((f for f in CHAT_FIELDS if state.needs(f)), None)
         if target:
             events.extend(
                 open_card_drafts(
