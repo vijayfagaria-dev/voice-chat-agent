@@ -31,7 +31,7 @@ def test_keeps_the_audio_framing() -> None:
 
 
 def test_keeps_the_message_type_strings() -> None:
-    assert values(CallServerMessageType) == ["audio", "stopPlayback", "transcript", "closing"]
+    assert values(CallServerMessageType) == ["audio", "stopPlayback", "transcript", "closing", "heartbeat"]
     # The starter's values, unchanged and first; protocol.md section 3.3/3.4 (P3-T04) adds the rest (additive).
     assert values(ChatServerMessageType) == [
         "message",

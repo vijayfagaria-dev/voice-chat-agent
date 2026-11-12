@@ -9,7 +9,7 @@ import { ChatClientMessageType, MIC_FRAME_BYTES, MIC_FRAME_MS } from "@voice-cha
 import { CallState } from "../state/conversation";
 import type { CallControls, Ui } from "../state/ui";
 import { handleCallMessage } from "../transport/callMessages";
-import { REDIAL_DELAYS_MS, shouldRedial } from "../lib/redial";
+import { HEARTBEAT_TIMEOUT_MS, REDIAL_DELAYS_MS, shouldRedial } from "../lib/redial";
 import { closeQuietly, parseClosing, socketUrl } from "../transport/socket";
 
 // Mic audio allowed to wait in the socket's send buffer before new frames are dropped.
@@ -92,36 +92,57 @@ export function useCall(ui: Ui, server: Server | null): CallControls {
         if (closing) noticed = closing;
         else handleCallMessage(ui, data);
       };
+      // The connection is lost, not ended: say so to the server (diagnosis), keep the microphone open and dial again.
+      let lostHandled = false;
+      const lost = (eventCode: number, wasClean: boolean) => {
+        if (lostHandled || current !== attempt.current) return;
+        lostHandled = true;
+        stopWatching();
+        // The chat socket is separate, so the server can be told what the page knew (a refused redial attempt, where the
+        // server spoke before closing, is not a loss).
+        if (connected && !noticed) {
+          const now = performance.now();
+          const rtt = (navigator as Navigator & { connection?: { rtt?: number } }).connection?.rtt;
+          sendDiagnostic({
+            type: ChatClientMessageType.CALL_LOST,
+            code: eventCode,
+            wasClean,
+            secondsOnCall: Math.round((now - openedAt) / 1000),
+            sinceServerMs: Math.round(now - lastServerAt),
+            ...(lastAudioAt ? { sinceAgentAudioMs: Math.round(now - lastAudioAt) } : {}),
+            ...(typeof rtt === "number" ? { rttMs: rtt } : {}),
+            onLine: navigator.onLine,
+            visibility: document.visibilityState,
+            audioState: currentAudioContext()?.state ?? "none",
+          });
+        }
+        if (!redialing) ui.addNote("Connection lost, reconnecting…");
+        ui.setCall(CallState.CONNECTING, "reconnecting…");
+        wsRef.current = null;
+        const delay = REDIAL_DELAYS_MS[redials++] ?? 8000;
+        setTimeout(() => {
+          if (current === attempt.current) dial(true);
+        }, delay);
+      };
+      // The server sends a heartbeat every few seconds. Silence for longer than this means the connection is dead even
+      // though the browser has not been told (a proxy can drop the server's side and leave this one open).
+      const watching = setInterval(() => {
+        if (current !== attempt.current) return stopWatching(); // hung up
+        if (connected && performance.now() - lastServerAt > HEARTBEAT_TIMEOUT_MS) {
+          closeQuietly(ws);
+          lost(1006, false);
+        }
+      }, 3000);
+      const stopWatching = () => clearInterval(watching);
       ws.onclose = (event) => {
+        stopWatching();
         // A proxy may replace the server's close code (Render does), so the code in the `closing` message wins.
         const code = noticed?.code ?? event.code;
         const reason = noticed?.reason ?? event.reason;
         if (
           shouldRedial({ connected, redialing, noticedCode: noticed?.code ?? null, eventCode: event.code, attempts: redials })
         ) {
-          // Tell the server what the page knew, so a drop can be diagnosed from the timeline (the chat socket is separate).
-          if (connected) {
-            const now = performance.now();
-            sendDiagnostic({
-              type: ChatClientMessageType.CALL_LOST,
-              code: event.code,
-              wasClean: event.wasClean,
-              secondsOnCall: Math.round((now - openedAt) / 1000),
-              sinceServerMs: Math.round(now - lastServerAt),
-              ...(lastAudioAt ? { sinceAgentAudioMs: Math.round(now - lastAudioAt) } : {}),
-              onLine: navigator.onLine,
-              visibility: document.visibilityState,
-              audioState: currentAudioContext()?.state ?? "none",
-            });
-          }
-          // Lost, not ended: keep the microphone open and dial again (the old call is replaced on the server).
-          if (!redialing) ui.addNote("Connection lost, reconnecting…");
-          ui.setCall(CallState.CONNECTING, "reconnecting…");
-          wsRef.current = null;
-          const delay = REDIAL_DELAYS_MS[redials++] ?? 8000;
-          setTimeout(() => {
-            if (current === attempt.current) dial(true);
-          }, delay);
+          lost(event.code, event.wasClean);
           return;
         }
         release();

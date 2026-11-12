@@ -43,7 +43,11 @@ export interface ChatClosingMessage {
   reason: string;
 }
 
-export type CallServerMessage = AudioMessage | StopPlaybackMessage | TranscriptMessage | CallClosingMessage;
+export interface HeartbeatMessage {
+  type: CallServerMessageType.HEARTBEAT;
+}
+
+export type CallServerMessage = AudioMessage | StopPlaybackMessage | TranscriptMessage | CallClosingMessage | HeartbeatMessage;
 export interface ChatMessage {
   type: ChatServerMessageType.MESSAGE;
   role: Role;
@@ -165,6 +169,7 @@ export interface CallLost {
   secondsOnCall: number;
   sinceServerMs?: number;
   sinceAgentAudioMs?: number;
+  rttMs?: number;
   onLine: boolean;
   visibility: string;
   audioState: string;

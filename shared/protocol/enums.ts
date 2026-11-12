@@ -9,6 +9,8 @@ export enum CallServerMessageType {
   TRANSCRIPT = "transcript",
   /** Sent just before the server closes the socket with a code (protocol.md v1.7). */
   CLOSING = "closing",
+  /** Every few seconds on a call: a long silence from the server means the connection is lost. */
+  HEARTBEAT = "heartbeat",
 }
 
 export enum ChatServerMessageType {

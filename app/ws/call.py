@@ -160,6 +160,19 @@ STALE_CALL_MS = 3_000
 REPLACE_WAIT_S = 3.0
 
 
+#: How often the server tells the page it is still there. The page treats 15 s of silence as a lost connection: a
+#: proxy can drop the server's side and leave the browser's open, and the browser then never hears a close.
+HEARTBEAT_S = 5.0
+
+
+async def _heartbeat(socket: ManagedSocket) -> None:
+    message = json.dumps({"type": "heartbeat"})
+    while socket.is_open:
+        await asyncio.sleep(HEARTBEAT_S)
+        if socket.is_open:
+            socket.send_text(message)
+
+
 _BACKGROUND: set[asyncio.Task[Any]] = set()
 
 
@@ -312,11 +325,13 @@ async def call_socket(socket: ManagedSocket, deps: CallSocketDeps, state: CallSt
 
     assert engine is not None
     running = engine
+    heartbeat = asyncio.ensure_future(_heartbeat(socket))
     state.active.engines.add(running)
 
     state.engines_by_session[session.id] = running
 
     def call_ended(_future: Any) -> None:
+        heartbeat.cancel()
         # The chat waits a moment before taking over from a call lost to the network (chat_planner.NETWORK_GRACE_MS):
         # reconcile once more when that is over, so a call that was not redialled still gets its next card.
         if running.end_reason == "network":

@@ -94,6 +94,12 @@ class TranscriptMessage(WireModel):
     id: str | None = None
 
 
+class HeartbeatMessage(WireModel):
+    """Sent every few seconds while a call is on: the page treats a long silence from the server as a lost connection."""
+
+    type: Literal["heartbeat"] = "heartbeat"
+
+
 class CallClosingMessage(WireModel):
     """Sent right before the server closes a socket with `code` (protocol.md v1.7). Same shape on /call and /chat."""
 
@@ -102,7 +108,7 @@ class CallClosingMessage(WireModel):
     reason: str
 
 
-CallServerMessage = AudioMessage | StopPlaybackMessage | TranscriptMessage | CallClosingMessage
+CallServerMessage = AudioMessage | StopPlaybackMessage | TranscriptMessage | CallClosingMessage | HeartbeatMessage
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -254,6 +260,7 @@ class CallLost(WireModel):
     since_agent_audio_ms: Annotated[StrictInt | StrictFloat, Field(ge=0, le=86_400_000, allow_inf_nan=False)] | None = (
         None
     )
+    rtt_ms: Annotated[StrictInt | StrictFloat, Field(ge=0, le=600_000, allow_inf_nan=False)] | None = None
     on_line: StrictBool
     visibility: Annotated[StrictStr, Field(max_length=16)]
     audio_state: Annotated[StrictStr, Field(max_length=16)]

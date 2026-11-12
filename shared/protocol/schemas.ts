@@ -43,6 +43,7 @@ export const ChatCallLostSchema = z.object({
   secondsOnCall: z.number().min(0).max(86_400),
   sinceServerMs: z.number().min(0).max(86_400_000).optional(),
   sinceAgentAudioMs: z.number().min(0).max(86_400_000).optional(),
+  rttMs: z.number().min(0).max(600_000).optional(),
   onLine: z.boolean(),
   visibility: z.string().max(16),
   audioState: z.string().max(16),

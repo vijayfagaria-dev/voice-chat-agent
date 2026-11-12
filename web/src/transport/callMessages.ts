@@ -22,6 +22,8 @@ export function handleCallMessage(ui: Ui, data: unknown): void {
       break;
     case CallServerMessageType.CLOSING:
       break; // read by useCall before this, to learn why the socket closes
+    case CallServerMessageType.HEARTBEAT:
+      break; // only its arrival matters (useCall)
     case undefined:
       break;
     default:

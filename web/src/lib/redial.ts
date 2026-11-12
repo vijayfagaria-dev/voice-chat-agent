@@ -4,6 +4,9 @@
 /** Waits before each new attempt, in order; the list's length is the number of attempts. */
 export const REDIAL_DELAYS_MS = [1000, 2000, 3000, 4000, 5000, 6000, 8000];
 
+/** The server sends a heartbeat every 5 s; this long without a word from it, the connection is treated as lost. */
+export const HEARTBEAT_TIMEOUT_MS = 15_000;
+
 export interface CloseFacts {
   /** The socket had opened (the upgrade completed). */
   connected: boolean;

@@ -27,3 +27,11 @@ describe("shouldRedial", () => {
     expect(shouldRedial({ ...lost, attempts: REDIAL_DELAYS_MS.length })).toBe(false);
   });
 });
+
+import { HEARTBEAT_TIMEOUT_MS } from "../src/lib/redial";
+
+describe("heartbeat", () => {
+  it("the page waits for several of the server's 5 s heartbeats before calling the connection lost", () => {
+    expect(HEARTBEAT_TIMEOUT_MS).toBeGreaterThanOrEqual(3 * 5000);
+  });
+});

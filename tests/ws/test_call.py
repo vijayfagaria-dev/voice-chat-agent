@@ -480,3 +480,11 @@ _ = RawSocket  # re-exported client type, kept for readers of the network-loss t
 async def _new_call_running(db: Any, id_: str, old_id: str | None) -> bool:
     now = await active_call_id(db, id_)
     return now is not None and now != old_id
+
+
+def test_the_heartbeat_message_is_what_the_page_listens_for() -> None:
+    from app.protocol.types import HeartbeatMessage, to_wire
+    from app.ws.call import HEARTBEAT_S
+
+    assert to_wire(HeartbeatMessage()) == {"type": "heartbeat"}
+    assert HEARTBEAT_S * 3 <= 15  # the page gives up after 15 s: at least three heartbeats fit

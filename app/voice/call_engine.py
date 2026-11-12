@@ -206,6 +206,8 @@ class CallEngine:
         self._unsubscribe: Callable[[], None] | None = None
         self._stt_bytes = 0
         self._last_audio_at = clock.now()
+        self._frames = 0
+        self._longest_gap_ms = 0.0
         self._end_detail: str | None = None
         #: The card the system opened for the turn in progress (announced by the agent, then cleared).
         self._just_opened: str | None = None
@@ -346,7 +348,11 @@ class CallEngine:
         if self._stopping or self._stt is None:
             return
         self._stt_bytes += len(pcm)
-        self._last_audio_at = self._clock.now()
+        now = self._clock.now()
+        if self._frames:
+            self._longest_gap_ms = max(self._longest_gap_ms, now - self._last_audio_at)
+        self._frames += 1
+        self._last_audio_at = now
         self._stt.push(pcm)
 
     @property
@@ -372,6 +378,16 @@ class CallEngine:
             self._spawn(self._end("network", (CloseCode.NORMAL, "connection lost")))
             return
         self._arm_mic_check()
+
+    def _detail_for(self, reason: CallEndReason) -> str:
+        """The end's detail; for a lost connection, what the browser's audio looked like before it (a stall, or a clean stop)."""
+        detail = self._end_detail or ""
+        if reason == "network":
+            detail += (
+                f" [{self._frames} audio frames, longest gap {round(self._longest_gap_ms)} ms, "
+                f"{round(self.mic_quiet_ms / 1000)} s since the last]"
+            )
+        return detail
 
     def drop(self, reason: CallEndReason, why: str, detail: str | None = None) -> asyncio.Future[None]:
         """Ends the call from our side and closes its socket (a newer call for the same session replaces it)."""
@@ -1056,7 +1072,7 @@ class CallEngine:
                         "type": "EndCall",
                         "call_id": self._call_id,
                         "reason": reason,
-                        **({"detail": self._end_detail} if self._end_detail else {}),
+                        **({"detail": self._detail_for(reason)} if self._end_detail else {}),
                     }
                 )
             except Exception as err:

@@ -1103,9 +1103,10 @@ class TestTheBrowserGoesAway:
             await c.step(20)
         assert c.port.of("EndCall") == []
         await c.step(11_000)
-        assert c.port.of("EndCall") == [
-            {"type": "EndCall", "call_id": "c1", "reason": "network", "detail": "no microphone audio for 11 s"}
-        ]
+        [end] = c.port.of("EndCall")
+        assert (end["reason"], end["call_id"]) == ("network", "c1")
+        assert end["detail"].startswith("no microphone audio for 11 s")
+        assert "100 audio frames" in end["detail"] and "longest gap 20 ms" in end["detail"]
         assert c.closes == [(CloseCode.NORMAL, "connection lost")]
 
     async def test_while_a_card_is_open_a_quiet_mic_is_given_much_longer_the_customer_is_in_the_chat(self) -> None:

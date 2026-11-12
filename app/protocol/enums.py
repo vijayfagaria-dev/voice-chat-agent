@@ -16,6 +16,8 @@ class CallServerMessageType(StrEnum):
     TRANSCRIPT = "transcript"
     # Sent just before the server closes the socket with a code (protocol.md v1.7).
     CLOSING = "closing"
+    # Every few seconds on a call, so the page can tell a silent server from a dead connection.
+    HEARTBEAT = "heartbeat"
 
 
 class ChatServerMessageType(StrEnum):
