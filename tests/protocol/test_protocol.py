@@ -44,7 +44,7 @@ def test_keeps_the_message_type_strings() -> None:
         "syncDone",
         "closing",
     ]
-    assert values(ChatClientMessageType) == ["inputResponse", "optOut", "clientMetric"]
+    assert values(ChatClientMessageType) == ["inputResponse", "optOut", "say", "clientMetric"]
 
 
 def test_keeps_the_enum_values_used_in_records_and_input_cards() -> None:

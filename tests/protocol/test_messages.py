@@ -72,6 +72,10 @@ class TestClientMessages:
             {"type": "clientMetric", "name": "turnLatency", "turnId": "t", "ms": 60_001, "at": "x"},
             {"type": "clientMetric", "name": "turnLatency", "turnId": "t", "ms": 1, "at": ""},
             {"type": "clientMetric", "name": "turnLatency", "turnId": "t", "ms": 1, "at": "x" * 41},
+            {"type": "say"},
+            {"type": "say", "text": ""},
+            {"type": "say", "text": "x" * 1001},
+            {"type": "say", "text": 5},
             "optOut",
             None,
         ],
@@ -79,6 +83,10 @@ class TestClientMessages:
     def test_rejects_the_wrong_shape(self, raw: Any) -> None:
         with pytest.raises(ValidationError):
             parse_chat_client_message(raw)
+
+    def test_parses_a_typed_message(self) -> None:
+        message = parse_chat_client_message({"type": "say", "text": "my phone is a Pixel"})
+        assert to_wire(message) == {"type": "say", "text": "my phone is a Pixel"}
 
     def test_parses_a_client_metric(self) -> None:
         message = parse_chat_client_message(

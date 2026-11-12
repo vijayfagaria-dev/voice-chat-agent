@@ -34,6 +34,8 @@ export const ChatInputResponseSchema = z.object({
 
 export const ChatOptOutSchema = z.object({ type: z.literal(ChatClientMessageType.OPT_OUT) });
 
+export const ChatSaySchema = z.object({ type: z.literal(ChatClientMessageType.SAY), text: z.string().min(1).max(1000) });
+
 export const ChatClientMetricSchema = z.object({
   type: z.literal(ChatClientMessageType.CLIENT_METRIC),
   name: z.literal("turnLatency"),
@@ -42,7 +44,7 @@ export const ChatClientMetricSchema = z.object({
   at: z.string().min(1).max(40),
 });
 
-export const ChatClientMessageSchema = z.discriminatedUnion("type", [ChatInputResponseSchema, ChatOptOutSchema, ChatClientMetricSchema]);
+export const ChatClientMessageSchema = z.discriminatedUnion("type", [ChatInputResponseSchema, ChatOptOutSchema, ChatSaySchema, ChatClientMetricSchema]);
 export type ParsedChatClientMessage = z.infer<typeof ChatClientMessageSchema>;
 
 // ---------------------------------------------------------------------------------------------------------------------

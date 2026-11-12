@@ -33,6 +33,8 @@ MAX_INPUT_ARRAY_ITEMS = 12
 MAX_ID_CHARS = 128
 # protocol.md section 7: outbound message text is at most 2,000 characters.
 MAX_MESSAGE_TEXT_CHARS = 2000
+#: The longest free message the customer can type (a sentence or two; cards carry the long things).
+MAX_SAY_CHARS = 1000
 
 # Patterns use [0-9] rather than \d: pydantic's regex engine treats \d as any Unicode digit, zod's did not.
 Id = Annotated[StrictStr, Field(min_length=1, max_length=MAX_ID_CHARS)]
@@ -233,6 +235,13 @@ class OptOutRequest(WireModel):
     type: Literal["optOut"] = "optOut"
 
 
+class Say(WireModel):
+    """Something the customer typed with no card open: a plain chat message (protocol.md section 3.4)."""
+
+    type: Literal["say"] = "say"
+    text: Annotated[StrictStr, Field(min_length=1, max_length=MAX_SAY_CHARS)]
+
+
 class ClientMetric(WireModel):
     """Client-side turn latency probe (protocol.md section 3.4; P11-T02)."""
 
@@ -243,7 +252,7 @@ class ClientMetric(WireModel):
     at: Annotated[StrictStr, Field(min_length=1, max_length=40)]
 
 
-ChatClientMessage = Annotated[InputResponse | OptOutRequest | ClientMetric, Field(discriminator="type")]
+ChatClientMessage = Annotated[InputResponse | OptOutRequest | Say | ClientMetric, Field(discriminator="type")]
 
 
 class UploadResponse(BaseModel):

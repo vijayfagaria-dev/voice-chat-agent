@@ -30,6 +30,7 @@ export enum ChatClientMessageType {
   INPUT_RESPONSE = "inputResponse",
   // Added by protocol.md v1.0 (§3.4).
   OPT_OUT = "optOut",
+  SAY = "say",
   CLIENT_METRIC = "clientMetric",
 }
 

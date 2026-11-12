@@ -151,6 +151,12 @@ export interface OptOutRequest {
   type: ChatClientMessageType.OPT_OUT;
 }
 
+/** Something typed with no card open: a plain chat message (protocol.md §3.4). */
+export interface Say {
+  type: ChatClientMessageType.SAY;
+  text: string;
+}
+
 /** Client-side turn latency probe (protocol.md §3.4; P11-T02). */
 export interface ClientMetric {
   type: ChatClientMessageType.CLIENT_METRIC;
@@ -160,7 +166,7 @@ export interface ClientMetric {
   at: string;
 }
 
-export type ChatClientMessage = InputResponse | OptOutRequest | ClientMetric;
+export type ChatClientMessage = InputResponse | OptOutRequest | Say | ClientMetric;
 
 export interface UploadResponse {
   url: string;

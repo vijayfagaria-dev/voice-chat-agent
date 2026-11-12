@@ -26,6 +26,7 @@ from app.domain.validators.voice_fields import (
     validate_urgency,
 )
 from app.protocol.enums import FieldSource, Role
+from app.protocol.types import MAX_SAY_CHARS
 from app.session.commands import CallEffect, Effects, EventDraft, Handler, TimerEffects
 from app.session.ids import new_message_id
 from app.session.snapshot import Snapshot
@@ -150,6 +151,9 @@ class SaveSpokenField:
     value: str
     evidence: str
     user_confirmed: bool = False
+    #: Where the words came from: the call, or the chat when the customer typed them with no card open. Typed, an
+    #: identifier is as good as a card's answer; heard, it is only noted (D13).
+    source: str = "call"
 
 
 def validate_spoken(snapshot: Snapshot, field: str, value: str, evidence: str) -> ValidationResult[Any]:
@@ -190,7 +194,7 @@ def save_spoken_field_handler(snapshot: Snapshot, command: SaveSpokenField) -> E
         return Effects(reply={"status": "refused", "reason": "notSpoken"})
     result = validate_spoken(snapshot, field, command.value, command.evidence)
     # An identifier heard aloud is noted but never accepted: it must be typed (D13).
-    chat_only = FIELDS[field].authority == "chatOnly"
+    chat_only = FIELDS[field].authority == "chatOnly" and command.source == "call"
     status = ("unverified" if chat_only else "valid") if result.status == "valid" else "invalid"
     normalized = result.normalized if result.status == "valid" else None
     error = result.error if result.status == "invalid" else None
@@ -198,10 +202,10 @@ def save_spoken_field_handler(snapshot: Snapshot, command: SaveSpokenField) -> E
         events=[
             EventDraft(
                 type="field.candidate",
-                channel="call",
+                channel="chat" if command.source == "chat" else "call",
                 candidate={
                     "field": field,
-                    "source": FieldSource.CALL,
+                    "source": FieldSource.CHAT if command.source == "chat" else FieldSource.CALL,
                     # The model's value only: its quote of the transcript (evidence) stays in the candidate row, out of
                     # the event payload and so out of the timeline (D12, commands.py).
                     "raw": command.value,
@@ -289,4 +293,25 @@ def agent_says_handler(snapshot: Snapshot, command: AgentSays) -> Effects:
             )
         ],
         reply={"said": True},
+    )
+
+
+def chat_say_handler(snapshot: Snapshot, command: Any) -> Effects:
+    """What the customer typed with no card open becomes a chat message of theirs (the agent answers it separately).
+    Reply: ``{"status": "said"|"empty"|"closed"}``."""
+    if snapshot.session.status != "active":
+        return Effects(reply={"status": "closed"})
+    text = command.text.strip()[:MAX_SAY_CHARS]
+    if not text:
+        return Effects(reply={"status": "empty"})
+    return Effects(
+        events=[
+            EventDraft(
+                type="chat.message",
+                channel="chat",
+                chat_message={"id": new_message_id(), "role": Role.USER, "text": text},
+            )
+        ],
+        activity=True,
+        reply={"status": "said"},
     )

@@ -29,5 +29,13 @@ class SubmitChatInput:
 
 
 @dataclass(frozen=True, slots=True)
+class ChatSay:
+    """Something typed with no card open. Reply: ``{"status": "said"}``, ``{"status": "empty"}`` or ``{"status": "closed"}``."""
+
+    type: ClassVar[str] = "ChatSay"
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
 class OptOutRequested:
     type: ClassVar[str] = "OptOutRequested"

@@ -35,6 +35,7 @@ class ChatClientMessageType(StrEnum):
     INPUT_RESPONSE = "inputResponse"
     # Added by protocol.md v1.0 (section 3.4).
     OPT_OUT = "optOut"
+    SAY = "say"
     CLIENT_METRIC = "clientMetric"
 
 

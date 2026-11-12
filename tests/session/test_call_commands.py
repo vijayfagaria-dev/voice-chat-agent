@@ -243,3 +243,35 @@ class TestAgentSays:
         assert await run(services, id_, AgentSays(text=" Hello there ")) == {"said": True}
         [event] = await list_events(db.pool, id_)
         assert_matches(event.payload["message"], {"role": "agent", "text": "Hello there"})
+
+
+class TestChatSay:
+    async def test_a_typed_message_is_the_customers_chat_message_and_an_empty_one_is_refused(
+        self, db, services
+    ) -> None:
+        from app.session.handlers.chat_input import ChatSay
+
+        id_ = await seed_session(db.pool)
+        assert await run(services, id_, ChatSay(text="   ")) == {"status": "empty"}
+        assert await run(services, id_, ChatSay(text=" my phone is a Pixel ")) == {"status": "said"}
+        [event] = [e for e in await list_events(db.pool, id_) if e.type == "chat.message"]
+        assert_matches(event.payload["message"], {"role": "user", "text": "my phone is a Pixel"})
+        assert event.payload["message"].get("requestId") is None
+
+    async def test_a_value_the_customer_typed_is_saved_as_chat_and_an_identifier_typed_counts(
+        self, db, services
+    ) -> None:
+        id_ = await seed_session(db.pool)
+        reply = await run(
+            services,
+            id_,
+            SaveSpokenField(field="email", value="a@b.co", evidence="my email is a@b.co", source="chat"),
+        )
+        assert_matches(reply, {"status": "valid"})
+        [candidate] = await list_field_candidates(db.pool, id_)
+        assert (candidate.source, candidate.status) == ("chat", "valid")
+        # Heard on a call, the same identifier is only noted.
+        reply = await run(
+            services, id_, SaveSpokenField(field="email", value="c@d.co", evidence="c at d dot co", source="call")
+        )
+        assert_matches(reply, {"status": "unverified"})
