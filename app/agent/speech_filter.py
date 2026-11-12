@@ -12,8 +12,14 @@ import re
 from app.domain.fields import FIELDS, RECORD_FIELD_IDS
 
 #: Internal names the model must never say aloud: field ids become their spoken label, state keys vanish.
+#: Only names that read as identifiers (camelCase, snake_case): a plain word such as "email" or "urgency" is ordinary speech,
+#: and rewriting it turned "email address" into "email address address" (live 2026-11-12).
 _FIELD_NAMES: dict[str, str] = {
-    **{field_id: FIELDS[field_id].label for field_id in RECORD_FIELD_IDS},
+    **{
+        field_id: FIELDS[field_id].label
+        for field_id in RECORD_FIELD_IDS
+        if field_id != field_id.lower() or "_" in field_id
+    },
     "submitConfirmation": "confirmation",
     "optOutConfirmation": "confirmation",
 }

@@ -44,6 +44,12 @@ class TestInternalNames:
             == "I have saved your device model and the start date, is true."
         )
 
+    # Live call of 2026-11-12: "type your email address" was spoken as "email address address".
+    def test_leaves_ordinary_words_that_happen_to_be_field_ids_alone(self) -> None:
+        assert clean_speech("Please type your email address, and tell me the urgency.") == (
+            "Please type your email address, and tell me the urgency."
+        )
+
     def test_catches_a_name_split_across_streamed_pieces_and_flushes_the_last_word(self) -> None:
         f = SpeechFilter()
         out = "".join(f.push(d) for d in ["Your device", "Model is set. Now the ser", "ialNumber"]) + f.flush()
