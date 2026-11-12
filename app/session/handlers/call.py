@@ -91,6 +91,8 @@ class EndCall:
     type: ClassVar[str] = "EndCall"
     call_id: str
     reason: CallEndReason
+    #: How it ended, when the reason alone isn't enough (the socket's close code, the mic going silent): for the timeline.
+    detail: str | None = None
 
 
 def end_call_handler(snapshot: Snapshot, command: EndCall) -> Effects:
@@ -104,7 +106,12 @@ def end_call_handler(snapshot: Snapshot, command: EndCall) -> Effects:
         EventDraft(
             type="call.ended",
             channel="call",
-            payload={"callId": command.call_id, "reason": command.reason, "seconds": seconds},
+            payload={
+                "callId": command.call_id,
+                "reason": command.reason,
+                "seconds": seconds,
+                **({"detail": command.detail} if command.detail else {}),
+            },
         )
     ]
     # A reason-specific note for ends the user didn't choose (P5-T09); after an ordinary hang-up the planner's

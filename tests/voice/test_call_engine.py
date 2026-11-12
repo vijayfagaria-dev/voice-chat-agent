@@ -292,6 +292,7 @@ class TestAUserTurn:
                 "field": "deviceModel",
                 "value": "Samsung Galaxy S23",
                 "evidence": "It's a Samsung Galaxy S23",
+                "source": "call",
             }
         ]
         assert c.tts.current.spoken("ta_c1_2") == "Got it, Samsung Galaxy S23. What's wrong with it?"
@@ -924,6 +925,47 @@ class TestP5ReviewFixes:
         assert "Thanks, I have noted that." in c.tts.current.spoken()
         await c.engine.stop("hangup")
 
+    async def test_an_email_typed_in_the_message_box_is_saved_as_typed_not_as_only_heard(self) -> None:
+        c = await call(timed_audio=False)
+        await c.step(100)
+        c.llm.enqueue(
+            LlmScript(
+                tool_calls=[
+                    {
+                        "name": "save_field",
+                        "args": {"field": "email", "value": "a@b.co", "spoken_evidence": "a@b.co"},
+                    }
+                ]
+            ),
+            LlmScript(text="Thanks."),
+        )
+        c.port.emit(
+            {
+                "type": "chat.message",
+                "channel": "chat",
+                "payload": {"message": {"id": "m3", "role": "user", "text": "a@b.co", "requestId": None}},
+            }
+        )
+        await c.step(3_000)
+        [save_command] = c.port.of("SaveSpokenField")
+        assert save_command["source"] == "chat"
+        await c.engine.stop("hangup")
+
+    async def test_a_chat_event_that_arrives_while_the_customer_is_talking_is_mentioned_once_they_stop(self) -> None:
+        c = await call(timed_audio=False)
+        await c.step(100)
+        c.stt.current.emit(SttSpeechStarted())  # a cough or a keyboard: heard as speech, never as a finished sentence
+        c.stt.current.emit(SttTranscript(text="uh hold on", is_final=False, speech_final=False))
+        await c.step(500)
+        c.port.emit({"type": "field.candidate", "payload": {"candidate": {"field": "email", "status": "valid"}}})
+        c.llm.enqueue(LlmScript(text="Got your email."))
+        await c.step(4_000)
+        assert len(c.llm.requests) == 1  # only the greeting so far
+        c.stt.current.emit(SttUtteranceEnd())
+        await c.step(3_000)
+        assert "Got your email." in c.tts.current.spoken()
+        await c.engine.stop("hangup")
+
     async def test_a_card_answer_is_not_mistaken_for_a_typed_message(self) -> None:
         c = await call(timed_audio=False)
         await c.step(100)
@@ -1060,7 +1102,9 @@ class TestTheBrowserGoesAway:
             await c.step(20)
         assert c.port.of("EndCall") == []
         await c.step(11_000)
-        assert c.port.of("EndCall") == [{"type": "EndCall", "call_id": "c1", "reason": "network"}]
+        assert c.port.of("EndCall") == [
+            {"type": "EndCall", "call_id": "c1", "reason": "network", "detail": "no microphone audio for 11 s"}
+        ]
         assert c.closes == [(CloseCode.NORMAL, "connection lost")]
 
     async def test_a_call_that_keeps_getting_mic_frames_is_left_alone(self) -> None:

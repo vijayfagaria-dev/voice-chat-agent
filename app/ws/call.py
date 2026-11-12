@@ -305,7 +305,9 @@ async def call_socket(socket: ManagedSocket, deps: CallSocketDeps, state: CallSt
     running.when_ended.add_done_callback(call_ended)
 
     def stop(code: int) -> None:
-        running.stop(end_reason_for(code)).add_done_callback(lambda _f: state.active.engines.discard(running))
+        running.stop(end_reason_for(code), f"socket closed with code {code}").add_done_callback(
+            lambda _f: state.active.engines.discard(running)
+        )
 
     if close_code is not None:
         stop(close_code)

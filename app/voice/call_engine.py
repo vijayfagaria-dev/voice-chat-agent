@@ -127,6 +127,10 @@ def _reply_get(reply: Any, key: str) -> Any:
     return getattr(reply, key, None)
 
 
+#: What a message typed in the chat is prefixed with when the call agent gets it as something the customer said.
+TYPED_PREFIX = "(typed in the chat) "
+
+
 def _utc(ms: float) -> datetime:
     return datetime.fromtimestamp(ms / 1000, UTC)
 
@@ -196,6 +200,7 @@ class CallEngine:
         self._unsubscribe: Callable[[], None] | None = None
         self._stt_bytes = 0
         self._last_audio_at = clock.now()
+        self._end_detail: str | None = None
         self._mic_timer: Any = None
         self._ending: asyncio.Future[None] | None = None
         #: Set first thing when the call ends, before any provider is closed (their close events must not look unexpected).
@@ -348,6 +353,7 @@ class CallEngine:
             return
         if self.mic_quiet_ms >= self._t.mic_stale_ms:
             self._log.warning("no mic audio; ending the call", quiet_ms=round(self.mic_quiet_ms))
+            self._end_detail = f"no microphone audio for {round(self.mic_quiet_ms / 1000)} s"
             self._spawn(self._end("network", (CloseCode.NORMAL, "connection lost")))
             return
         self._arm_mic_check()
@@ -356,8 +362,11 @@ class CallEngine:
         """Ends the call from our side and closes its socket (a newer call for the same session replaces it)."""
         return self._end(reason, (CloseCode.NORMAL, why))
 
-    def stop(self, reason: CallEndReason) -> asyncio.Future[None]:
-        """The socket closed (the user hung up, the network dropped, the server is restarting)."""
+    def stop(self, reason: CallEndReason, detail: str | None = None) -> asyncio.Future[None]:
+        """The socket closed (the user hung up, the network dropped, the server is restarting). `detail` says how, for
+        the timeline (the socket's close code)."""
+        if detail and self._end_detail is None:
+            self._end_detail = detail
         return self._end(reason, None)
 
     # ---------------------------------------------------------------------------------------------------------------
@@ -727,11 +736,20 @@ class CallEngine:
             ungrounded = grounding_error(args["spoken_evidence"], said)
             if ungrounded:
                 return ToolOutcome(result={"status": "rejected", "error": ungrounded}, ok=False, quiet=True)
+            # Words the customer typed in the chat count as typed: an email or serial number in them is as good as a
+            # card's answer (live 2026-11-12: a typed email was refused as "only heard" and asked for again).
+            typed = [m[len(TYPED_PREFIX) :] for m in said if m.startswith(TYPED_PREFIX)]
+            spoken = [m for m in said if not m.startswith(TYPED_PREFIX)]
+            from_chat = (
+                grounding_error(args["spoken_evidence"], typed) is None
+                and grounding_error(args["spoken_evidence"], spoken) is not None
+            )
             command: dict[str, Any] = {
                 "type": "SaveSpokenField",
                 "field": args["field"],
                 "value": args["value"],
                 "evidence": args["spoken_evidence"],
+                "source": "chat" if from_chat else "call",
             }
             if args.get("user_confirmed") is not None:
                 command["user_confirmed"] = args["user_confirmed"]
@@ -831,7 +849,7 @@ class CallEngine:
     def _typed(self, text: str) -> None:
         """The customer typed a message in the chat during the call: the agent takes it as something they said (so a
         value in it can be saved) and answers at the next natural moment, in speech."""
-        self._pending_user.append(f"(typed in the chat) {text}")
+        self._pending_user.append(f"{TYPED_PREFIX}{text}")
         self._last_card_at = self._clock.now()  # they are busy typing, not silent
         self._reprompts = 0
         self._schedule_proactive()
@@ -851,8 +869,11 @@ class CallEngine:
         self._proactive_timer = None
         if self._stopping or not (self._pending or self._pending_user):
             return
-        # Not while anyone is speaking or a turn is in flight; the notes then ride along with the next turn.
+        # Not while anyone is speaking or a turn is in flight: try again shortly. Dropping it here left a typed message or a
+        # card answer unmentioned until the customer happened to speak (live 2026-11-12: "I have selected one", 13 s
+        # after they had).
         if self._turn is not None or self._user_turns.speaking:
+            self._schedule_proactive()
             return
         self._spawn(self._agent_turn(proactive=True))
 
@@ -960,7 +981,14 @@ class CallEngine:
         # EndCall first (the chat takes over at once, P5-T09 <= 1 s), the providers' closes alongside (P5 review #10).
         async def end_call() -> None:
             try:
-                await self._port.dispatch({"type": "EndCall", "call_id": self._call_id, "reason": reason})
+                await self._port.dispatch(
+                    {
+                        "type": "EndCall",
+                        "call_id": self._call_id,
+                        "reason": reason,
+                        **({"detail": self._end_detail} if self._end_detail else {}),
+                    }
+                )
             except Exception as err:
                 self._log.error("EndCall failed", message=str(err))
 
