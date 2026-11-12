@@ -7,6 +7,8 @@ export const REDIAL_DELAYS_MS = [1000, 2000, 3000, 4000, 5000, 6000, 8000];
 /** The server sends a heartbeat every 5 s; this long without a word from it, the connection is treated as lost. */
 export const HEARTBEAT_TIMEOUT_MS = 15_000;
 
+const SERVER_RESTARTING = 1012;
+
 export interface CloseFacts {
   /** The socket had opened (the upgrade completed). */
   connected: boolean;
@@ -22,9 +24,12 @@ export interface CloseFacts {
 
 export function shouldRedial(facts: CloseFacts): boolean {
   if (facts.attempts >= REDIAL_DELAYS_MS.length) return false;
-  // The server said why it closed, so its end is final: except "a call is already running", which is the old, dead
-  // call still being replaced (the server frees the session once it has heard nothing for a few seconds).
-  if (facts.noticedCode !== null) return facts.redialing && facts.noticedCode === 4409;
+  // The server said why it closed, so its end is final, with two exceptions: "server restarting" (a deploy; the new
+  // server is up in a few seconds), and "a call is already running", which is the old, dead call still being replaced
+  // (the server frees the session once it has heard nothing for a few seconds).
+  if (facts.noticedCode !== null) {
+    return facts.noticedCode === SERVER_RESTARTING || (facts.redialing && facts.noticedCode === 4409);
+  }
   // No notice: the connection was lost (1006), or, while redialing, could not be made yet.
   return facts.connected ? facts.eventCode === 1006 : facts.redialing;
 }

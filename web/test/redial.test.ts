@@ -13,6 +13,10 @@ describe("shouldRedial", () => {
     expect(shouldRedial({ ...lost, noticedCode: 1000 })).toBe(false);
     expect(shouldRedial({ ...lost, noticedCode: 4429 })).toBe(false);
   });
+  it("dials again when the server says it is restarting (a deploy), unlike its other endings", () => {
+    expect(shouldRedial({ ...lost, noticedCode: 1012 })).toBe(true);
+    expect(shouldRedial({ ...lost, noticedCode: 1012, attempts: REDIAL_DELAYS_MS.length })).toBe(false);
+  });
   it("does not when the very first connection never opened", () => {
     expect(shouldRedial({ ...lost, connected: false })).toBe(false);
   });
