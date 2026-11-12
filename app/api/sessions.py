@@ -28,7 +28,7 @@ from app.db.repos.field_candidates import list_field_candidates, list_field_cand
 from app.db.repos.input_requests import get_open_input_request
 from app.db.repos.outbox import list_outbox
 from app.db.repos.records import list_records
-from app.db.repos.sessions import Session, get_session, list_started_sessions
+from app.db.repos.sessions import Session, get_session, list_started_sessions, soft_delete_session
 from app.db.repos.timers import list_timers
 from app.db.repos.transcript_lines import list_transcript_lines
 from app.db.repos.turn_metrics import list_turn_metrics
@@ -206,6 +206,19 @@ def session_read_router(
                 }
             )
         return _json(200, {"sessions": items})
+
+    @router.delete("/api/sessions/{session_id}")
+    async def delete(session_id: str) -> Response:
+        """Hides a claim from the list (soft delete: its history stays). Refused while a call is on it."""
+        id = parse_session_id(session_id)
+        if not id:
+            return _json(400, {"error": "invalid_session_id", "message": "The session id must be a UUIDv4."})
+        outcome = await soft_delete_session(pool, id)
+        if outcome == "notFound":
+            return _json(404, {"error": "not_found", "message": "No such session."})
+        if outcome == "inCall":
+            return _json(409, {"error": "in_call", "message": "Hang up the call before deleting this claim."})
+        return _json(200, {"status": "deleted"})
 
     @router.get("/api/sessions/{session_id}")
     async def summary(session_id: str) -> Response:

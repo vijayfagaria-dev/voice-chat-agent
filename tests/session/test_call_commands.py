@@ -275,3 +275,18 @@ class TestChatSay:
             services, id_, SaveSpokenField(field="email", value="c@d.co", evidence="c at d dot co", source="call")
         )
         assert_matches(reply, {"status": "unverified"})
+
+
+class TestADeletedClaimIsLeftAlone:
+    async def test_the_idle_timer_does_not_finalize_a_deleted_claim(self, db, services) -> None:
+        from app.db.repos.sessions import soft_delete_session
+        from app.session.handlers.timers import TimerFired
+
+        id_ = await seed_session(db.pool)
+        await upsert_timer(db.pool, Timer(session_id=id_, kind="idle", due_at=datetime.now(UTC) - timedelta(seconds=5)))
+        assert await soft_delete_session(db.pool, id_) == "deleted"
+        reply = await run(services, id_, TimerFired(kind="idle", due_at=datetime.now(UTC)))
+        assert reply == {"fired": False, "reason": "deleted"}
+        session = await get_session(db.pool, id_)
+        assert session is not None and session.status == "active"
+        assert [t.kind for t in await list_timers(db.pool, id_) if t.kind == "idle"] == []

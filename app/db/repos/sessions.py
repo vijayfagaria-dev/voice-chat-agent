@@ -26,11 +26,13 @@ class Session:
     review_flags: list[Any]
     last_activity_at: datetime
     created_at: datetime
+    #: Set when the customer deleted the claim from the list (soft delete: the history stays).
+    deleted_at: datetime | None = None
 
 
 COLUMNS = """id, status, outcome, version, current_revision AS "currentRevision", language,
   active_call_id AS "activeCallId", open_request_id AS "openRequestId", review_flags AS "reviewFlags",
-  last_activity_at AS "lastActivityAt", created_at AS "createdAt\""""
+  last_activity_at AS "lastActivityAt", created_at AS "createdAt", deleted_at AS "deletedAt\""""
 
 
 def _session(row: asyncpg.Record) -> Session:
@@ -46,6 +48,7 @@ def _session(row: asyncpg.Record) -> Session:
         review_flags=row["reviewFlags"],
         last_activity_at=row["lastActivityAt"],
         created_at=row["createdAt"],
+        deleted_at=row["deletedAt"],
     )
 
 
@@ -109,9 +112,22 @@ async def list_started_sessions(db: Queryable, limit: int = 50) -> list[Session]
     """
     rows = await db.fetch(
         f"""SELECT {COLUMNS} FROM sessions s
-     WHERE EXISTS (SELECT 1 FROM field_candidates f WHERE f.session_id = s.id)
-        OR EXISTS (SELECT 1 FROM calls c WHERE c.session_id = s.id)
+     WHERE s.deleted_at IS NULL
+       AND (EXISTS (SELECT 1 FROM field_candidates f WHERE f.session_id = s.id)
+            OR EXISTS (SELECT 1 FROM calls c WHERE c.session_id = s.id))
      ORDER BY last_activity_at DESC, id LIMIT $1""",
         limit,
     )
     return [_session(r) for r in rows]
+
+
+async def soft_delete_session(db: Queryable, id: str) -> str:
+    """Hides a claim from the list: ``"deleted"`` (also when it already was), ``"inCall"`` (a call is on: hang up first)
+    or ``"notFound"``. Nothing is removed."""
+    row = await db.fetchrow("SELECT active_call_id FROM sessions WHERE id = $1", id)
+    if row is None:
+        return "notFound"
+    if row["active_call_id"] is not None:
+        return "inCall"
+    await db.execute("UPDATE sessions SET deleted_at = COALESCE(deleted_at, now()) WHERE id = $1", id)
+    return "deleted"

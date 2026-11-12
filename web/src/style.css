@@ -177,3 +177,5 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 .picker li strong { overflow-wrap: anywhere; }
 .picker li span, .picker-note { color: var(--muted); font-size: 13px; }
 .picker li button { padding: 6px 14px; border: 1px solid var(--accent); border-radius: 6px; background: transparent; color: var(--accent); cursor: pointer; }
+.picker-actions { display: flex; gap: 8px; }
+.picker li .picker-delete { border-color: var(--danger); color: var(--danger); }

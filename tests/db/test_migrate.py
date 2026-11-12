@@ -88,20 +88,20 @@ class TestRealMigrations:
         db = await fresh.open()
         assert await tables(db) == []
 
-        assert (await migrate(db.pool)).applied == ["001_init"]
+        assert (await migrate(db.pool)).applied == ["001_init", "002_soft_delete"]
         assert await tables(db) == EXPECTED_TABLES
         rows = await db.pool.fetch("SELECT version, name FROM schema_migrations")
-        assert [(r["version"], r["name"]) for r in rows] == [(1, "001_init")]
+        assert [(r["version"], r["name"]) for r in rows] == [(1, "001_init"), (2, "002_soft_delete")]
 
         assert (await migrate(db.pool)).applied == []
-        assert await db.pool.fetchval("SELECT count(*)::int FROM schema_migrations") == 1
+        assert await db.pool.fetchval("SELECT count(*)::int FROM schema_migrations") == 2
 
     async def test_applies_each_migration_exactly_once_when_several_processes_boot_at_the_same_time(
         self, fresh: Fresh
     ) -> None:
         pools = [await fresh.open() for _ in range(6)]
         results = await asyncio.gather(*(migrate(db.pool) for db in pools))
-        assert [name for r in results for name in r.applied] == ["001_init"]
+        assert [name for r in results for name in r.applied] == ["001_init", "002_soft_delete"]
         assert await tables(await fresh.open()) == EXPECTED_TABLES
 
 
@@ -152,4 +152,4 @@ class TestRunnerBehaviour:
             load_migrations(migrations_dir({"1_init.sql": ""}))
         with pytest.raises(MigrationError, match="contiguous"):
             load_migrations(migrations_dir({"001_a.sql": "", "003_c.sql": ""}))
-        assert [m.name for m in load_migrations()] == ["001_init"]
+        assert [m.name for m in load_migrations()] == ["001_init", "002_soft_delete"]

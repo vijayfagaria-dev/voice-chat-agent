@@ -81,6 +81,7 @@ check "GET /api/sessions" 200 '"sessions":' "$BASE/api/sessions"
 check "GET /api/sessions/:id" 200 '"status":"active"' "$BASE/api/sessions/$SESSION"
 check "GET /api/sessions/:id/timeline" 200 '"session.created"' "$BASE/api/sessions/$SESSION/timeline"
 check "GET /api/sessions/:id/records" 200 '"records":[]' "$BASE/api/sessions/$SESSION/records"
+check "DELETE /api/sessions/:id (unknown)" 404 '"not_found"' -X DELETE "$BASE/api/sessions/$UNKNOWN"
 check "GET /api/sessions/:id (unknown)" 404 '"not_found"' "$BASE/api/sessions/$UNKNOWN"
 check "GET /api/sessions/:id (not a UUID)" 400 '"invalid_session_id"' "$BASE/api/sessions/not-a-uuid"
 
@@ -118,7 +119,7 @@ fi
 
 # The README must still document each endpoint exercised above.
 for endpoint in \
-  "GET /healthz" "GET /readyz" "POST /sessions/:sessionId/files" "GET /api/sessions" "GET /api/sessions/:id" "GET /api/sessions/:id/timeline" \
+  "GET /healthz" "GET /readyz" "POST /sessions/:sessionId/files" "GET /api/sessions" "DELETE /api/sessions/:id" "GET /api/sessions/:id" "GET /api/sessions/:id/timeline" \
   "GET /api/sessions/:id/records" "GET /files/:fileId" "POST /hooks/records" "GET /hooks/records" "POST /api/sessions" \
   "POST /api/sessions/:id/finalize" "WS /chat" "WS /call"; do
   documented "$endpoint"

@@ -68,6 +68,9 @@ def timer_fired_handler(deps: FinalizeDeps) -> Handler:
         # Gone (fired elsewhere or cleared) or moved later by activity since the sweeper read it.
         if timer is None or timer.due_at > snapshot.now:
             return Effects(reply={"fired": False, "reason": "notDue"})
+        if snapshot.session.deleted_at is not None and kind in ("idle", "sessionExpiry"):
+            # A deleted claim is never finalized (and so never delivered) behind the customer's back.
+            return Effects(timers=TimerEffects(clear=[kind]), reply={"fired": False, "reason": "deleted"})
         if kind == "idle":
             # Never during a call (the call's end re-arms it), and only while the session is active.
             if snapshot.session.active_call_id is not None:

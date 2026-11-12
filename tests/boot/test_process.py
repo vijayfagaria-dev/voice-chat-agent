@@ -154,7 +154,7 @@ class TestDatabase:
         async with started(server_env(empty_database_url, "production")) as server:
             try:
                 log = migration_log(server.output())
-                assert log["applied"] == ["001_init"] and log["count"] == 1
+                assert log["applied"] == ["001_init", "002_soft_delete"] and log["count"] == 2
                 async with httpx.AsyncClient(base_url=server.address) as client:
                     page = await client.get("/")
                     assert page.status_code == 200
@@ -172,7 +172,7 @@ class TestDatabase:
     async def test_applies_0_migrations_on_the_second_boot(self, empty_database_url: str):
         env = server_env(empty_database_url)
         async with started(env) as first:
-            assert migration_log(first.output())["count"] == 1
+            assert migration_log(first.output())["count"] == 2
             assert await first.stop() == 0
         async with started(env) as server:
             log = migration_log(server.output())
@@ -183,7 +183,7 @@ class TestDatabase:
         env = server_env(empty_database_url)
         async with started(env) as one, started(env) as two:
             applied = [a for s in (one, two) for a in migration_log(s.output())["applied"]]
-            assert applied == ["001_init"]
+            assert applied == ["001_init", "002_soft_delete"]
             assert await one.stop() == 0
             assert await two.stop() == 0
 

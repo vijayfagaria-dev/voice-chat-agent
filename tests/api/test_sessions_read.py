@@ -321,3 +321,27 @@ async def test_the_list_has_every_started_claim_with_a_title_and_progress_and_le
     }
     assert item["progress"]["total"] > 0 and 0 < item["progress"]["done"] <= item["progress"]["total"]
     expect_no_leaks(res.json(), FAKE_SECRET_VALUES)
+
+
+async def test_deleting_a_claim_hides_it_from_the_list_but_keeps_its_history(rig: Any) -> None:
+    db, client, services = rig
+    id = await rich_session(db, services)
+    other = await rich_session(db, services)
+    events_before = await db.pool.fetchval("SELECT count(*) FROM events WHERE session_id = $1", id)
+    res = await client.delete(f"/api/sessions/{id}")
+    assert (res.status_code, res.json()) == (200, {"status": "deleted"})
+    assert (await client.delete(f"/api/sessions/{id}")).status_code == 200  # again: still fine
+    listed = {item["sessionId"] for item in (await client.get("/api/sessions")).json()["sessions"]}
+    assert id not in listed and other in listed
+    assert await db.pool.fetchval("SELECT count(*) FROM events WHERE session_id = $1", id) == events_before
+    assert (await client.get(f"/api/sessions/{id}")).status_code == 200  # the record is still there to inspect
+
+
+async def test_deleting_refuses_an_unknown_claim_a_bad_id_and_a_claim_on_a_call(rig: Any) -> None:
+    db, client, services = rig
+    assert (await client.delete("/api/sessions/not-a-uuid")).status_code == 400
+    assert (await client.delete("/api/sessions/0b6f4c1e-3d2a-4e8b-9a71-5c2d8e9f1a3b")).status_code == 404
+    id = await rich_session(db, services)
+    await db.pool.execute("UPDATE sessions SET active_call_id = 'cDel' WHERE id = $1", id)
+    res = await client.delete(f"/api/sessions/{id}")
+    assert (res.status_code, res.json()["error"]) == (409, "in_call")

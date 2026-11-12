@@ -22,6 +22,18 @@ export function SessionPicker() {
     };
   }, []);
 
+  const remove = async (claim: Claim) => {
+    if (!window.confirm(`Delete "${claimName(claim)}"? It disappears from this list.`)) return;
+    try {
+      const res = await fetch(`${base}/api/sessions/${claim.sessionId}`, { method: "DELETE" });
+      if (res.status === 409) return window.alert("Hang up the call first, then delete this claim.");
+      if (!res.ok) throw new Error(String(res.status));
+      setClaims((current) => current?.filter((item) => item.sessionId !== claim.sessionId) ?? null);
+    } catch {
+      window.alert("Could not delete the claim. Please try again.");
+    }
+  };
+
   return (
     <main className="picker">
       <h1>Device repair claims</h1>
@@ -39,9 +51,14 @@ export function SessionPicker() {
               <strong>{claimName(claim)}</strong>
               <span>{claimStatus(claim)}</span>
             </div>
-            <button type="button" onClick={() => openClaim(claim.sessionId)}>
-              {isOpen(claim) ? "Resume" : "View"}
-            </button>
+            <div className="picker-actions">
+              <button type="button" onClick={() => openClaim(claim.sessionId)}>
+                {isOpen(claim) ? "Resume" : "View"}
+              </button>
+              <button type="button" className="picker-delete" onClick={() => remove(claim)}>
+                Delete
+              </button>
+            </div>
           </li>
         ))}
       </ul>
