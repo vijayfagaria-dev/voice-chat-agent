@@ -136,7 +136,7 @@ Cost is the **list price** of what was used (speech, language model), counted pe
 
 ## Tests and honest limitations
 
-About 1,170 Python tests and 96 page tests. Many are scenario tests that run a real server with fake providers: a card answered during a call, a dropped call finished in chat, repeated invalid answers, call and chat disagreeing, a reload, a restart in the middle of a call, duplicate delivery, a returning customer, uploads of fake files. Several guards exist because a real call failed in exactly that way.
+About 1,170 Python tests and 101 page tests. Many are scenario tests that run a real server with fake providers: a card answered during a call, a dropped call finished in chat, repeated invalid answers, call and chat disagreeing, a reload, a restart in the middle of a call, duplicate delivery, a returning customer, uploads of fake files. Several guards exist because a real call failed in exactly that way.
 
 Known limitations:
 - English only; one call at a time (the free model's rate limit); the free server sleeps when idle.

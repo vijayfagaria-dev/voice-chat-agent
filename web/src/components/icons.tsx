@@ -28,3 +28,11 @@ export const PhoneIcon = () => (
 export const AvatarIcon = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0z" /></svg>
 );
+
+export const MoreIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" stroke="none">
+    <circle cx="12" cy="5" r="1.8" />
+    <circle cx="12" cy="12" r="1.8" />
+    <circle cx="12" cy="19" r="1.8" />
+  </svg>
+);

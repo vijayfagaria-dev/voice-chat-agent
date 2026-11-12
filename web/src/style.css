@@ -199,3 +199,15 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
   .claim { flex-direction: column; align-items: stretch; }
   .claim-actions { grid-auto-flow: column; grid-auto-columns: 1fr; }
 }
+
+/* The header's overflow menu: All claims, Copy link, Stop this claim. */
+.menu { position: relative; flex: none; }
+.menu-btn { width: 36px; height: 36px; border: none; border-radius: 50%; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: transparent; color: var(--header-text); cursor: pointer; }
+.menu-btn svg { width: 20px; height: 20px; }
+.menu-btn:hover, .menu-btn[aria-expanded="true"] { background: rgba(255, 255, 255, 0.16); }
+.menu-list { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 220px; padding: 6px; background: #fff; color: var(--text); border-radius: 10px; box-shadow: 0 8px 24px rgba(11, 20, 26, 0.22), 0 0 0 1px rgba(11, 20, 26, 0.06); display: grid; }
+.menu-list a, .menu-list button { display: block; width: 100%; padding: 9px 12px; border: 0; border-radius: 7px; background: transparent; color: inherit; font: inherit; font-size: 14px; text-align: left; text-decoration: none; cursor: pointer; }
+.menu-list a:hover, .menu-list button:hover { background: #f0f2f4; }
+.menu-list hr { margin: 6px 4px; border: 0; border-top: 1px solid #e6e9eb; }
+.menu-list .danger { color: #b3261e; }
+.menu-list .danger:hover { background: #fde9ed; }

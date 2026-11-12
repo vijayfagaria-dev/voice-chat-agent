@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { sessionLink } from "../../lib/closeCodes";
 import { CallState, isInCall, type CallStatus } from "../../state/conversation";
-import { PhoneIcon } from "../icons";
+import { MoreIcon, PhoneIcon } from "../icons";
 import { CallTimer } from "./CallTimer";
 import { MicMeter } from "./MicMeter";
 
@@ -20,6 +20,25 @@ interface Props {
 export function Header({ call, notice, onCall, onStop, shareable = false }: Props) {
   const inCall = isInCall(call.state);
   const [copied, setCopied] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // The menu closes on a click elsewhere or Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const away = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", away);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
   const copyLink = async () => {
     const link = sessionLink(location.href);
@@ -44,26 +63,62 @@ export function Header({ call, notice, onCall, onStop, shareable = false }: Prop
             {call.connectedAt !== null && <CallTimer since={call.connectedAt} />}
           </span>
         </div>
-        {shareable && (
-          <a className="text-btn" href={location.pathname} title="See all claims, or start a new one">
-            All claims
-          </a>
-        )}
-        {shareable && (
-          <button className="text-btn" type="button" onClick={copyLink} title="Copy a link to this claim, e.g. to continue on your phone">
-            {copied ? "Copied" : "Copy link"}
-          </button>
-        )}
-        {onStop && (
-          <button className="text-btn stop-btn" type="button" onClick={onStop} title="Stop this claim (you'll be asked to confirm)">
-            Stop
-          </button>
+        {(shareable || onStop) && (
+          <div className="menu" ref={menuRef}>
+            <button
+              className="menu-btn"
+              type="button"
+              aria-label="More options"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <MoreIcon />
+            </button>
+            {menuOpen && (
+              <div className="menu-list" role="menu">
+                {shareable && (
+                  <a role="menuitem" href={location.pathname}>
+                    All claims
+                  </a>
+                )}
+                {shareable && (
+                  <button
+                    role="menuitem"
+                    type="button"
+                    onClick={async () => {
+                      await copyLink();
+                      setMenuOpen(false);
+                    }}
+                  >
+                    {copied ? "Link copied" : "Copy link to this claim"}
+                  </button>
+                )}
+                {onStop && (
+                  <>
+                    <hr />
+                    <button
+                      role="menuitem"
+                      type="button"
+                      className="danger"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onStop();
+                      }}
+                    >
+                      Stop this claim…
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         )}
         <button
           className={`call-btn${inCall ? " hangup" : ""}`}
           type="button"
           aria-label={inCall ? "Hang up" : "Start call"}
-          title="Use headphones; browser echo cancellation is best-effort."
+          title={inCall ? "Hang up (the claim stays open in the chat)" : "Start a call"}
           disabled={call.disabled}
           onClick={onCall}
         >
