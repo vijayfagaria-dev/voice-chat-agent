@@ -253,10 +253,25 @@ def _option_label(field: str, value: Any) -> str:
     return _js_string(value)
 
 
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def _started_on(date: str, precision: Any) -> str:
+    """A start date as a person says it ("10 Nov 2026", "Week of 2 Nov 2026", "Oct 2026"), not as an ISO string."""
+    try:
+        year, month, day = (int(part) for part in date.split("-"))
+        name = _MONTHS[month - 1]
+    except (ValueError, IndexError):
+        return date
+    if precision == "month":
+        return f"{name} {year}"
+    return f"{'Week of ' if precision == 'week' else ''}{day} {name} {year}"
+
+
 def summary_value(field: str, resolved: ResolvedField) -> str:
     """One field's value as the summary shows it (capped, so the whole summary stays short)."""
     if resolved.status in ("skipped", "missing"):
-        return "missing" if FIELDS[field].required else "none"
+        return "missing" if FIELDS[field].required else "not provided"
     if resolved.status != "valid":
         return f"not accepted ({resolved.status})"
     v = resolved.value
@@ -269,8 +284,7 @@ def summary_value(field: str, resolved: ResolvedField) -> str:
         text = _js_string(summary) if summary is not None else ""
     elif field == "problemStartedAt":
         precision = _get(v, "precision")
-        suffix = "" if precision == "day" else f" (around then, by {_js_string(precision)})"
-        text = f"{_js_string(_get(v, 'date'))}{suffix}"
+        text = _started_on(_js_string(_get(v, "date")), precision)
     elif field == "urgency":
         text = _option_label(field, _get(v, "level"))
     elif field == "serialNumber":
@@ -280,7 +294,7 @@ def summary_value(field: str, resolved: ResolvedField) -> str:
     elif field == "serviceCentre":
         text = f"{_js_string(_get(v, 'name'))}, {_js_string(_get(v, 'city'))}"
     elif field == "additionalPhotos":
-        text = ("1 photo" if len(v) == 1 else f"{len(v)} photos") if isinstance(v, list) else "none"
+        text = ("1 photo" if len(v) == 1 else f"{len(v)} photos") if isinstance(v, list) else "not provided"
     else:
         text = _js_string(v)
     return truncate(clean_text(text), SUMMARY_VALUE_CHARS)

@@ -249,7 +249,7 @@ class TestChatModeTheNextCard:
         text = g(g(events[0], "chat_message"), "text")
         assert re.match(r"^Here's your claim:\n• Device type: Phone\n• Device model: Apple iPhone 14 Pro\n", text)
         assert "• Serial number: IMEI 352099001761481" in text
-        assert "• Photos: none" in text
+        assert "• Photos: not provided" in text
         card = g(events[1], "input_request")
         assert (g(card, "id"), g(card, "field")) == ("req_submitConfirmation_1", "submitConfirmation")
         assert g(g(card, "spec"), "kind") == "confirm" and g(g(card, "spec"), "label") == "Submit your claim?"
