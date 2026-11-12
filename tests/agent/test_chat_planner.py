@@ -425,3 +425,22 @@ class TestP4ReviewFixes:
         assert {"deviceType", "deviceModel", "email", "additionalNotes"} <= set(editable)
         typed = resolve_fields(valid_fields(ALL_REQUIRED, "chat"))
         assert len(editable_fields(typed)) == 11
+
+
+class TestAfterACallLostToTheNetwork:
+    """The page redials by itself, so the chat waits a few seconds before taking over from a lost call."""
+
+    def lost(self, ended_ago_s: float, reason: str = "network"):
+        return plan(
+            session=session(active_call_id=None),
+            calls=[call(started_at=at(-60), ended_at=at(-ended_ago_s), end_reason=reason)],
+        )
+
+    def test_takes_over_nothing_in_the_grace_period(self) -> None:
+        assert self.lost(3).events == []
+
+    def test_takes_over_once_the_grace_is_over(self) -> None:
+        assert shape(self.lost(30).events)[-1][0] == "input.requested"
+
+    def test_other_ends_hand_over_at_once(self) -> None:
+        assert shape(self.lost(1, reason="hangup").events)[-1][0] == "input.requested"

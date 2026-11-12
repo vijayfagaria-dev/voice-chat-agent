@@ -44,6 +44,9 @@ if TYPE_CHECKING:
 ChatMode = Literal["waiting", "inCall", "chat", "closed"]
 
 
+#: After a call is lost to the network the chat waits this long before taking over (the page redials by itself).
+NETWORK_GRACE_MS = 15_000
+
 #: Fields the chat may ask for: every record field has a card (voice fields have chat fallbacks, PD5).
 _RECORD_FIELDS = frozenset([*CALL_FIELDS, *CHAT_FIELDS, *OPTIONAL_FIELDS])
 
@@ -216,6 +219,13 @@ def plan_chat(snapshot: Snapshot) -> ChatPlan:
         # it, in order, after the voice questions. The planner only opens what it queued, above, and cancels what the
         # call made obsolete. (It used to chain the cards itself; they then appeared while the agent was still asking
         # other things, live 2026-11-12.)
+        return ChatPlan(mode, events)
+
+    # A call that was just lost to the network is probably being redialled by the page (it does so by itself): the chat
+    # waits a few seconds before it takes over, so no card or "continue here" shows up for a blip. The call route
+    # reconciles again once the grace is over.
+    lost = [c for c in snapshot.calls if c.end_reason == "network" and c.ended_at is not None]
+    if lost and _ms(snapshot.now) - max(_ms(c.ended_at) for c in lost if c.ended_at is not None) < NETWORK_GRACE_MS:
         return ChatPlan(mode, events)
 
     # 4. Chat mode: the next field the flow needs, in order.

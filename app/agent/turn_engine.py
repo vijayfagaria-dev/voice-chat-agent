@@ -107,6 +107,8 @@ class TurnOutput:
     #: The model gave empty or refused output.
     refused: bool = False
     aborted: bool = False
+    #: Only what the model itself wrote (not the templated acknowledgements): did it say anything of its own?
+    model_text: str = ""
     #: Tool calls run, by name (for tests and the timeline).
     tools_run: list[str] = field(default_factory=list)
 
@@ -254,6 +256,7 @@ async def run_turn(deps: TurnDeps, input: TurnInput, sink: TurnSink) -> TurnOutp
                     await aclose()
         release(True)
         speak(speech_filter.flush())
+        out.model_text += text
         just_said = ""
         record.ttft_ms = stream.ttft_ms
         if deps.on_round is not None:

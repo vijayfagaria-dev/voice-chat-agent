@@ -209,6 +209,8 @@ class CallEngine:
         self._end_detail: str | None = None
         #: The card the system opened for the turn in progress (announced by the agent, then cleared).
         self._just_opened: str | None = None
+        self._announce_tries = 0
+        self._end_reason: str | None = None
         self._mic_timer: Any = None
         self._ending: asyncio.Future[None] | None = None
         #: Set first thing when the call ends, before any provider is closed (their close events must not look unexpected).
@@ -346,6 +348,10 @@ class CallEngine:
         self._stt_bytes += len(pcm)
         self._last_audio_at = self._clock.now()
         self._stt.push(pcm)
+
+    @property
+    def end_reason(self) -> str | None:
+        return self._end_reason
 
     @property
     def mic_quiet_ms(self) -> float:
@@ -589,9 +595,16 @@ class CallEngine:
         speech.end()
         # Until the user has heard it all (or interrupted it): barge-in stays possible, and silence counts from here.
         spoken = await self._played_out(turn)
-        # The card was announced if the agent got to say it; cut off, the next turn announces it again.
-        if not out.aborted and not spoken.interrupted:
-            self._just_opened = None
+        # The card was announced if the model got to say something about it. Cut off, or only an acknowledgement
+        # ("Understood.") and no words of its own, and it is announced again (live 2026-11-12: the invoice card opened
+        # and Riya said only "Understood."), at most twice.
+        if self._just_opened is not None:
+            if not out.aborted and not spoken.interrupted and out.model_text.strip():
+                self._just_opened = None
+            else:
+                self._announce_tries += 1
+                if self._announce_tries >= 3:
+                    self._just_opened = None
         self._after_agent_turn(turn, spoken, out.messages)
         # Chat events this turn never got to mention go back for the next one (P5 review #8).
         if not spoken.heard and (out.aborted or spoken.interrupted):
@@ -618,7 +631,7 @@ class CallEngine:
             return
         if not spoken.interrupted:
             self._arm_silence()
-        if self._pending or self._pending_user:
+        if self._pending or self._pending_user or self._just_opened is not None:
             self._schedule_proactive()
 
     def _record_turn_metric(self, turn: _AgentTurn, spoken: SpokenTurn | None, llm_ttft_ms: float | None) -> None:
@@ -738,6 +751,7 @@ class CallEngine:
         if _reply_get(reply, "status") not in ("queued", "alreadyPending"):
             return ctx
         self._just_opened = field
+        self._announce_tries = 0
         self._last_card_at = self._clock.now()
         return await self._port.context(self._call_id)
 
@@ -913,7 +927,7 @@ class CallEngine:
 
     def _proactive_fired(self) -> None:
         self._proactive_timer = None
-        if self._stopping or not (self._pending or self._pending_user):
+        if self._stopping or not (self._pending or self._pending_user or self._just_opened is not None):
             return
         # Not while anyone is speaking or a turn is in flight: try again shortly. Dropping it here left a typed message or a
         # card answer unmentioned until the customer happened to speak (live 2026-11-12: "I have selected one", 13 s
@@ -1000,6 +1014,7 @@ class CallEngine:
         """Ends the call exactly once: timers, speech, providers, the ledger, EndCall, then the socket."""
         if self._ending is not None:
             return self._ending
+        self._end_reason = reason
         self._stopping = True
         self._ending = _eager(self._do_end(reason, close))
         return self._ending

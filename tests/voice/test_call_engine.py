@@ -1174,6 +1174,20 @@ class TestTheSystemOpensTheCards:
         assert last_state(c.llm)["nextStep"] == {"say": "waitForCard", "field": "serialNumber"}
         await c.engine.stop("hangup")
 
+    async def test_a_card_the_model_did_not_announce_with_words_of_its_own_is_announced_on_the_next_turn(self) -> None:
+        # Live 2026-11-12: after "Understood." nothing was said about the invoice card that had just opened.
+        c = await call(timed_audio=False)
+        self.wire_cards(c)
+        for field in ("deviceType", "deviceModel", "problemDescription", "problemStartedAt", "urgency"):
+            c.port.ctx.fields[field] = resolved("valid", "x", "call")
+        await c.step(100)
+        c.llm.enqueue(LlmScript(tool_calls=[]), LlmScript(text="I have sent a box for your serial number."))
+        c.stt.current.say("it is critical")
+        await c.step(5_000)
+        assert "I have sent a box for your serial number." in c.tts.current.spoken()
+        assert [cmd["field"] for cmd in c.port.of("RequestInput")] == ["serialNumber"]
+        await c.engine.stop("hangup")
+
     async def test_a_card_the_model_asks_for_too_early_or_twice_is_refused_or_ignored_quietly(self) -> None:
         c = await call(timed_audio=False)
         self.wire_cards(c)

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import json
 import os
 import time
@@ -20,6 +21,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple
 
+from app.agent.chat_planner import NETWORK_GRACE_MS
 from app.limits.quota_guard import QuotaGuard, is_provider_refusal
 from app.protocol.constants import MIC_FRAME_BYTES
 from app.protocol.session import CloseCode
@@ -156,6 +158,20 @@ def _call_wire(message: Any) -> str:
 STALE_CALL_MS = 3_000
 #: How long the replaced call gets to write its EndCall before the new one is refused anyway.
 REPLACE_WAIT_S = 3.0
+
+
+_BACKGROUND: set[asyncio.Task[Any]] = set()
+
+
+def _spawn_background(coro: Any) -> None:
+    task = asyncio.ensure_future(coro)
+    _BACKGROUND.add(task)
+    task.add_done_callback(_BACKGROUND.discard)
+
+
+async def _react_quietly(deps: Any, session_id: str) -> None:
+    with contextlib.suppress(Exception):  # best effort: the next command or connect reconciles too
+        await deps.processor.react(session_id)
 
 
 async def _replace_quiet_call(state: CallState, session_id: str, log: Any) -> bool:
@@ -301,6 +317,13 @@ async def call_socket(socket: ManagedSocket, deps: CallSocketDeps, state: CallSt
     state.engines_by_session[session.id] = running
 
     def call_ended(_future: Any) -> None:
+        # The chat waits a moment before taking over from a call lost to the network (chat_planner.NETWORK_GRACE_MS):
+        # reconcile once more when that is over, so a call that was not redialled still gets its next card.
+        if running.end_reason == "network":
+            loop = asyncio.get_running_loop()
+            loop.call_later(
+                NETWORK_GRACE_MS / 1000 + 1, lambda: asyncio.ensure_future(_react_quietly(deps, session.id))
+            )
         state.active.engines.discard(running)
         if state.engines_by_session.get(session.id) is running:
             del state.engines_by_session[session.id]
