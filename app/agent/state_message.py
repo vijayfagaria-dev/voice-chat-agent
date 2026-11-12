@@ -62,6 +62,18 @@ def _escape_tags(text: str) -> str:
     return text.replace("<", _LEFT_ANGLE).replace(">", _RIGHT_ANGLE)
 
 
+def masked_identifier(field_id: str, value: Any) -> str | None:
+    """How the agent may refer to an identifier aloud, worked out here because a model miscounts "the last 4 digits"
+    (live 2026-11-12: it read 8451 as "9451"). None for fields that are not identifiers."""
+    if field_id == "serialNumber" and isinstance(value, Mapping):
+        text = str(value.get("value", ""))
+        kind = "IMEI" if value.get("kind") == "imei" else "serial number"
+        return f"{kind} ending {text[-4:]}" if text else None
+    if field_id == "email" and isinstance(value, str):
+        return f"email at {value.rsplit('@', 1)[1]}" if "@" in value else "email on file"
+    return None
+
+
 def as_chat_data(field: str, text: str) -> str:
     """Text the customer typed, as data: ``<chat_input field="email">...</chat_input>``, brackets escaped."""
     return f'<chat_input field="{field}">{_escape_tags(text)}</chat_input>'
@@ -94,7 +106,7 @@ def build_state(state_input: StateInput) -> dict[str, Any]:
     for field_id in RECORD_FIELD_IDS:
         field = fields[field_id]
         if field.status == "valid":
-            text = summary_value(field_id, field)
+            text = masked_identifier(field_id, field.value) or summary_value(field_id, field)
             collected[field_id] = (
                 as_chat_data(field_id, text) if field.source == "chat" else as_spoken_data(field_id, text)
             )

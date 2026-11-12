@@ -18,7 +18,7 @@ from typing import Any
 import pytest
 
 from app.agent.turn_engine import FILLER_LINE
-from app.agent.voice_templates import OPTED_OUT_GOODBYE, PROVIDER_TROUBLE, REPROMPTS
+from app.agent.voice_templates import OPTED_OUT_GOODBYE, PROVIDER_TROUBLE, REPROMPTS, SUBMITTED_GOODBYE
 from app.domain.fields import RECORD_FIELD_IDS
 from app.protocol.enums import Role
 from app.protocol.session import CloseCode
@@ -1199,4 +1199,16 @@ class TestTheSystemOpensTheCards:
         c.stt.current.say("hello")
         await c.step(2_500)
         assert c.port.of("RequestInput") == []  # a voice question is still open: not yet
+        await c.engine.stop("hangup")
+
+
+class TestTheClaimIsSubmittedWhileRiyaIsStillTalking:
+    async def test_what_she_was_saying_is_cut_and_the_goodbye_comes_at_once(self) -> None:
+        c = await call(greeting=LlmScript(text=f"{LONG} {LONG}".replace("?", "."), piece_chars=30), fast_audio=True)
+        await c.step(700)
+        c.port.emit({"type": "session.finalized", "channel": "chat", "payload": {"outcome": "completed"}})
+        await c.step(3_000)
+        assert len(stop_playbacks(c.sent)) > 0
+        assert SUBMITTED_GOODBYE in c.tts.current.spoken()
+        assert "ta_c1_1" in c.tts.current.cancelled_turns  # the long line was cut, not played to the end
         await c.engine.stop("hangup")

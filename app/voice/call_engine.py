@@ -903,6 +903,14 @@ class CallEngine:
                 self._spawn(self._goodbye_then_end(payload.get("outcome") == "optedOut"))
 
     async def _goodbye_then_end(self, opted_out: bool) -> None:
+        # Whatever Riya was saying is out of date now (live 2026-11-12: the read-back asked the customer to tap Yes for 12
+        # more seconds after they had already submitted): stop it and say goodbye at once.
+        turn = self._turn
+        if turn is not None:
+            if turn.speech.speaking:
+                self._barge_in(turn)
+            else:
+                turn.abort.abort()
         await self._say_templated(OPTED_OUT_GOODBYE if opted_out else SUBMITTED_GOODBYE)
         await self._end("opted_out" if opted_out else "agent_ended", (CloseCode.NORMAL, "agent ended"))
 
