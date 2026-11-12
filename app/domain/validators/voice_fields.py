@@ -116,6 +116,18 @@ BRANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
+# Speech recognition capitalises a sentence's first word: "IPhone 14". Apple's own product names have a fixed casing.
+_PRODUCT_NAMES = {
+    "iphone": "iPhone",
+    "ipad": "iPad",
+    "ipod": "iPod",
+    "imac": "iMac",
+    "macbook": "MacBook",
+    "airpods": "AirPods",
+}
+_PRODUCT_CASING = re.compile(rf"\b({'|'.join(_PRODUCT_NAMES)})\b", re.IGNORECASE)
+
+
 def detect_brand(text: str) -> str | None:
     tokens = words(text)
     for brand, aliases in BRANDS:
@@ -156,6 +168,7 @@ def validate_device_model(raw: Any, *, allow_unknown: bool = False) -> Validatio
     else:
         leading_brand = None
     model = leading_brand.sub("", text, count=1).strip() if leading_brand else text
+    model = _PRODUCT_CASING.sub(lambda m: _PRODUCT_NAMES[m.group(1).lower()], model)
     return valid({"brand": brand, "model": None if model == "" else model})
 
 

@@ -169,7 +169,11 @@ async def _replace_quiet_call(state: CallState, session_id: str, log: Any) -> bo
         log.warning(
             "replacing a call that stopped sending audio", call_id=old.call_id, quiet_ms=round(old.mic_quiet_ms)
         )
-        old.drop("network", "replaced")
+        old.drop(
+            "network",
+            "replaced",
+            f"replaced by a new call: no audio from the browser for {round(old.mic_quiet_ms / 1000)} s",
+        )
     try:
         await asyncio.wait_for(asyncio.shield(old.when_ended), REPLACE_WAIT_S)
     except TimeoutError:

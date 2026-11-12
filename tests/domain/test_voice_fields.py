@@ -301,3 +301,15 @@ class TestValidateUrgency:
             err(validate_urgency(raw))
             == "How soon do you need it back: no rush, within a few days, urgently, or immediately?"
         )
+
+
+def test_apple_product_names_get_their_own_casing_whatever_the_speech_recogniser_wrote() -> None:
+    from app.domain.validators.voice_fields import validate_device_model
+
+    for said, model in [
+        ("IPhone 14", "iPhone 14"),
+        ("apple iphone 14 pro", "iPhone 14 pro"),
+        ("macbook air", "MacBook air"),
+    ]:
+        result = validate_device_model(said)
+        assert result.status == "valid" and result.normalized["model"] == model

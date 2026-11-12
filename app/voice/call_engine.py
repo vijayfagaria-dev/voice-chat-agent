@@ -367,8 +367,10 @@ class CallEngine:
             return
         self._arm_mic_check()
 
-    def drop(self, reason: CallEndReason, why: str) -> asyncio.Future[None]:
+    def drop(self, reason: CallEndReason, why: str, detail: str | None = None) -> asyncio.Future[None]:
         """Ends the call from our side and closes its socket (a newer call for the same session replaces it)."""
+        if detail and self._end_detail is None:
+            self._end_detail = detail
         return self._end(reason, (CloseCode.NORMAL, why))
 
     def stop(self, reason: CallEndReason, detail: str | None = None) -> asyncio.Future[None]:

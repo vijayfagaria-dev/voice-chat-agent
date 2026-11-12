@@ -8,6 +8,7 @@ import { MIC_FRAME_BYTES, MIC_FRAME_MS } from "@voice-chat-agent/shared/protocol
 import { CallState } from "../state/conversation";
 import type { CallControls, Ui } from "../state/ui";
 import { handleCallMessage } from "../transport/callMessages";
+import { REDIAL_DELAYS_MS, shouldRedial } from "../lib/redial";
 import { closeQuietly, parseClosing, socketUrl } from "../transport/socket";
 
 // Mic audio allowed to wait in the socket's send buffer before new frames are dropped.
@@ -59,48 +60,67 @@ export function useCall(ui: Ui, server: Server | null): CallControls {
     }
     if (current !== attempt.current) return;
 
-    ui.setCall(CallState.CONNECTING, "connecting…");
-    let ws: WebSocket;
-    try {
-      ws = new WebSocket(socketUrl(server, "/call"));
-    } catch (err) {
-      release();
-      ui.setCall(
-        CallState.ERROR,
-        errorMessage(err, `Could not connect to ${server.http}`),
-      );
-      return;
-    }
-    ws.binaryType = "arraybuffer";
-    let connected = false;
-    ws.onopen = () => {
-      connected = true;
-      ui.setCall(CallState.CONNECTED, "on call");
-      ui.addNote("Call started");
-    };
-    let noticed: { code: number; reason: string } | null = null; // from the server's `closing` message
-    ws.onmessage = ({ data }) => {
-      const closing = parseClosing(data);
-      if (closing) noticed = closing;
-      else handleCallMessage(ui, data);
-    };
-    ws.onclose = (event) => {
-      // A proxy may replace the server's close code (Render does), so the code in the `closing` message wins.
-      const code = noticed?.code ?? event.code;
-      release();
-      const refused = callCloseMessage(code);
-      if (connected && refused) {
-        // The server completed the upgrade only to say why it can't take the call (protocol.md §6).
-        ui.setCall(CallState.ENDED, "no call");
-        ui.addNote(refused);
-      } else if (connected) {
-        ui.setCall(CallState.ENDED, "call ended");
-        ui.addNote("Call ended");
-      } else {
-        ui.setCall(CallState.ERROR, `Could not connect to ${server.http}`);
+    let redials = 0;
+    const dial = (redialing: boolean) => {
+      ui.setCall(CallState.CONNECTING, redialing ? "reconnecting…" : "connecting…");
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(socketUrl(server, "/call"));
+      } catch (err) {
+        release();
+        ui.setCall(CallState.ERROR, errorMessage(err, `Could not connect to ${server.http}`));
+        return;
       }
+      ws.binaryType = "arraybuffer";
+      let connected = false;
+      ws.onopen = () => {
+        connected = true;
+        redials = 0;
+        ui.setCall(CallState.CONNECTED, "on call");
+        ui.addNote(redialing ? "Call reconnected" : "Call started");
+      };
+      let noticed: { code: number; reason: string } | null = null; // from the server's `closing` message
+      ws.onmessage = ({ data }) => {
+        const closing = parseClosing(data);
+        if (closing) noticed = closing;
+        else handleCallMessage(ui, data);
+      };
+      ws.onclose = (event) => {
+        // A proxy may replace the server's close code (Render does), so the code in the `closing` message wins.
+        const code = noticed?.code ?? event.code;
+        const reason = noticed?.reason ?? event.reason;
+        if (
+          shouldRedial({ connected, redialing, noticedCode: noticed?.code ?? null, eventCode: event.code, attempts: redials })
+        ) {
+          // Lost, not ended: keep the microphone open and dial again (the old call is replaced on the server).
+          if (!redialing) ui.addNote("Connection lost, reconnecting…");
+          ui.setCall(CallState.CONNECTING, "reconnecting…");
+          wsRef.current = null;
+          const delay = REDIAL_DELAYS_MS[redials++] ?? 8000;
+          setTimeout(() => {
+            if (current === attempt.current) dial(true);
+          }, delay);
+          return;
+        }
+        release();
+        const refused = callCloseMessage(code);
+        if (connected && refused) {
+          // The server completed the upgrade only to say why it can't take the call (protocol.md §6).
+          ui.setCall(CallState.ENDED, "no call");
+          ui.addNote(refused);
+        } else if (connected) {
+          ui.setCall(CallState.ENDED, "call ended");
+          ui.addNote(reason === "silence" ? "Call ended: no one spoke for a while" : "Call ended");
+        } else if (redialing) {
+          ui.setCall(CallState.ENDED, "call ended");
+          ui.addNote("The connection was lost and could not be restored. Tap the phone to call again.");
+        } else {
+          ui.setCall(CallState.ERROR, `Could not connect to ${server.http}`);
+        }
+      };
+      wsRef.current = ws;
     };
-    wsRef.current = ws;
+    dial(false);
   }, [ui, server, release, sendFrame]);
 
   const hangUp = useCallback(() => {
